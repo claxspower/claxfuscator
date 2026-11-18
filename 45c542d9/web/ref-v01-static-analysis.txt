@@ -1,0 +1,448 @@
+1	DEVAM ET VE GÖREVİNİ ÇOK İYİ OKU BİRDE ARTIK İMZA V0.1 YERİNE V0.2 OLSUN İMZA ARTIK YANİ İYİCE OKU ÇÜNKÜ https://luarn.pages.dev BİLE BİZDEN DAHA GÜÇLÜ HE BİRDE LUAU HİGHLİGHT EKLE: Claxfuscator V0.1 Korumalı Lua Dosyasının Uçtan Uca Statik Analizi, Deobfuscation'ı, Yeniden İnşası ve Güvenlik Değerlendirmesi
+2	
+3	## 0. ÖZET
+4	
+5	Elimde "Claxfuscator V0.1" ile korunmuş bir Lua dosyası var. Loader IIFE'si, iki dev [==[ ... ]==] encoded string tablosu, özel alfabe stringi (A), anahtar stringi (K) ve tamsayı state değişkenleri (M, T) içeriyor. Bu dosyayı hiçbir aşamada çalıştırmadan, tamamen statik analizle çözmeni, davranışsal olarak eşdeğer okunabilir bir Lua kaynağı üretmeni ve şemayı teknik + güvenlik perspektifiyle raporlamanı istiyorum.
+6	
+7	Bu bir "obfuscation reverse engineering" görevidir, "payload çalıştırma" görevi değildir. Aradaki fark kritik: çalıştırma yok, statik manipülasyon var.
+8	
+9	---
+10	
+11	## 1. BAĞLAM
+12	
+13	Dosyanın başında şu imza var:
+14	
+15	    --[[ This, File Protected By Claxfuscator V0.1 https://discord.gg/cHawU8Wmzj ]]
+16	
+17	Gövde tipik loader yapısında:
+18	
+19	    return(function(...)
+20	        local A = "uzun_alfabe_stringi"
+21	        local K = "anahtar_stringi"
+22	        local M = 3
+23	        local T = 1
+24	        local G = { [==[ dev_bir_encoded_blob_1 ]==], [==[ dev_bir_encoded_blob_2 ]==] }
+25	        ...
+26	    end)
+27	
+28	Elimizde: (a) iki dev encoded string tablosu (G), (b) özel alfabe (A), (c) anahtar (K), (d) state değişkenleri (M, T), (e) index tabanlı decoder döngüsü, (f) muhtemelen G[i] / decode(i) çağrı noktaları.
+29	
+30	Bu Claxfuscator V0.1'in bilinen imzası, ancak tam varyantı varsayma — teşhis edeceksin.
+31	
+32	---
+33	
+34	## 2. GÖREV TANIMI
+35	
+36	Tek cümleyle: "Bu Claxfuscator V0.1 dosyasını çalıştırmadan, decoder'ını yeniden yazarak tüm string'leri çöz, çağrı noktalarına inline et, loader'ı sadeleştir, davranışsal olarak eşdeğer temiz bir Lua kaynağı üret ve şemayı güvenlik perspektifiyle raporla."
+37	
+38	Üç paralel eksen:
+39	
+40	1. Analitik: Şemayı anla, algoritmayı çöz, anahtar türetimini belgele.
+41	2. Mühendislik: Decoder'ı yeniden yaz, string'leri çöz, inline et, sadeleştir, syntax check yap.
+42	3. Güvenlik: Payload'ın ne yaptığını tespit et, risk bayrağını koy, göstergeleri listele.
+43	
+44	Analitik tamamlanmadan mühendisliğe geçme. Mühendislik tamamlanmadan güvenliğe geçme.
+45	
+46	---
+47	
+48	## 3. HEDEFLER (öncelik sırası, 1 = en yüksek)
+49	
+50	1. Şemayı teşhis et (alfabe/XOR/ROT/base-N/karışık).
+51	2. Decoder'ı haritala (döngü, index aritmetiği, state makinesi, çıktı uzunluğu).
+52	3. String tablolarını çıkar; hangi indeksin hangi bloğa denk geldiğini netleştir.
+53	4. Decoder'ı deterministik ve self-contained olarak yeniden yaz; anahtar malzemesi birebir aynı.
+54	5. Tüm string'leri decode et; index -> literal eşlemesi üret; sayı uyuşmazlığında dur.
+55	6. Inline et; tüm decode(i) / G[i] erişimlerini literal ile değiştir.
+56	7. Loader'ı sadeleştir; varargs sarmalayıcı, IIFE, junk kontrol akışı, ölü kod temizle.
+57	8. deobfuscated.lua üret; davranışsal olarak eşdeğer, obfuscation katmanından arınmış.
+58	9. Teknik rapor yaz (şema, anahtar türetimi, zayıflıklar, gelecek versiyon riskleri).
+59	10. Güvenlik değerlendirmesi yap; zararlıysa bayrakla, göstergeleri listele.
+60	
+61	---
+62	
+63	## 4. MUTLAK KISITLAR — İHLALİ GÖREVİ DÜŞÜRÜR
+64	
+65	### 4.1 Çalıştırma yasağı
+66	- Obfuscated dosyayı hiçbir yorumlayıcıda çalıştırma: Lua 5.1, LuaJIT, 5.2, 5.3, 5.4, Roblox, Luau, OpenResty.
+67	- load, loadstring, dofile, require, os.execute, io.popen, pcall, xpcall payload üzerinde kullanılmayacak.
+68	- Decoder'ı test ederken bile gerçek payload string'lerini çalıştırma. Sentetik string'lerle test et.
+69	
+70	### 4.2 Ağ yasağı
+71	- Payload'ın çözebileceği hiçbir URL'ye, webhook'a, pastebin'e, API'ye istek atma.
+72	- Decoder çalışırken dışarıya hiçbir paket çıkmasın.
+73	
+74	### 4.3 Dosya sistemi yasağı
+75	- Sadece kendi çalışma dizinine yaz.
+76	- Payload'ın kodlayabileceği hiçbir path'e okuma/yazma yok.
+77	- os.tmpname, io.tmpfile gibi payload etkileşimli API'leri kullanma.
+78	
+79	### 4.4 "İyileştirme" yasağı
+80	- Dead code temizliği serbest; ama iş mantığını, sabitleri, koşulları değiştirme.
+81	- Orijinal davranış ile deobfuscated.lua birebir eşdeğer olmalı.
+82	
+83	### 4.5 Belirsizlikte durma zorunluluğu
+84	- Obfuscated jump, computed goto, upvalue hilesi, _ENV manipülasyonu, debug metamethod'u, setmetatable/__index yönlendirmesi, coroutine kontrol akışı, string.dump+loadstring kombinasyonu → sessizce tahmin etme, dur ve açıkla.
+85	- "Muhtemelen şöyle çalışıyordur" cümlesi yasak. "Şu satırda şu opcode var, şu hipotezi destekliyor" serbest.
+86	
+87	### 4.6 Zararlılık bayrağı zorunluluğu
+88	- Ağ exfil, dosya silme, credential erişimi, backdoor, persistence, anti-debug görürsen en üstte bayrakla.
+89	- Format: GÜVENLİK: ZARARLI-MUHTEMEL / GÜVENLİK: TEMİZ-GÖRÜNÜMLÜ / GÜVENLİK: BELİRSİZ.
+90	- Sessizce ilerlemek yasak.
+91	
+92	---
+93	
+94	## 5. ORTAM VE ARAÇ SEÇİMİ
+95	
+96	### 5.1 Hedef Lua sürümü
+97	- Muhtemelen Lua 5.1 / LuaJIT.
+98	- 5.3/5.4 sözdizimi (//, &, |, <<, >>, math.type, utf8) varsa belirt.
+99	- LuaJIT bit kütüphanesi (bit.bxor, bit.band, bit.bor, bit.lshift, bit.rshift, bit.rol, bit.ror) varsa ayrıca belirt.
+100	- 5.3+ utf8.char, utf8.codepoint, utf8.codes varsa belirt.
+101	
+102	### 5.2 Decoder dili
+103	- Tercih: Python 3 (güvenli, payload çalıştırmaz).
+104	- Alternatif: Lua 5.1 sadece string/byte üzerinde, gerekçelendirerek.
+105	- Yasak: luajit/lua ile payload çalıştırmak.
+106	
+107	### 5.3 Bytecode tespiti
+108	- Decoded içerik \x1bLua (= 0x1B 0x4C 0x75 0x61) ile başlıyorsa .luac olarak ayır.
+109	- Byte header: \x51=5.1, \x52=5.2, \x53=5.3, \x54=5.4. LuaJIT ise \x1bLJ.
+110	- Raporda belirt ve .luac'ı ayrı teslim et.
+111	
+112	### 5.4 Yardımcı araçlar
+113	- luac -p (sadece syntax check, parse; çalıştırma değil), luac -l
+114	- Python struct, binascii, re, json
+115	- luaparser (Python) veya luacheck
+116	
+117	---
+118	
+119	## 6. ADIM ADIM METODOLOJİ
+120	
+121	### FAZ 0 — GÜVENLİK VE ORTAM HAZIRLIĞI (atlanamaz)
+122	
+123	1. Çalışma dizinini izole et (/tmp/claxfuscator_analysis/).
+124	2. Decoder'ında socket/requests/urllib olmadığından emin ol.
+125	3. Orijinal dosyayı read-only aç.
+126	4. SHA-256 hash, byte boyutu, satır sayısı kaydet.
+127	5. Çıktı: phase0_baseline.json.
+128	
+129	{"file":"original.lua","sha256":"...","bytes":123456,"lines":2345,"timestamp":"..."}
+130	
+131	### FAZ 1 — FINGERPRINT VE TOP-LEVEL HARİTA
+132	
+133	1. İlk 3 satırı birebir alıntıla.
+134	2. Header varlığını doğrula.
+135	3. Tüm top-level local değişkenleri listele: A, K, M, T, G + varsa diğerleri.
+136	4. Her birinin rolünü tek cümleyle yaz (alfabe uzunluk N, anahtar uzunluk M, state başlangıç değerleri, G eleman sayısı ve boyutları).
+137	5. return(function(...) ... end) yapısını doğrula; IIFE ve varargs kullanımını not et.
+138	6. Başka top-level lokal/global varsa listele.
+139	
+140	Çıktı: phase1_fingerprint.md.
+141	Durma koşulu: header veya yapı tanımadığın gibiyse dur ve raporla.
+142	
+143	### FAZ 2 — DECODER HARİTASI (EN KRİTİK)
+144	
+145	#### 2.1 Decoder'ı bul
+146	- G'yi tüketen döngüyü/fonksiyonu bul.
+147	- Desenler: for i = 1, #G do ... end, while i <= #G do ... end, closure, inline.
+148	
+149	#### 2.2 Alfabe analizi
+150	- A uzunluğu. 2'nin kuvveti mi (16/32/64/128/256) → base-N işareti.
+151	- Tekrar eden karakter var mı → custom alphabet.
+152	- Yazdırılabilir ASCII mi, byte aralığı mı?
+153	
+154	#### 2.3 Anahtar analizi
+155	- K uzunluğu. Indexleme (K[i % #K + 1]), XOR, toplama/çıkarma, rotasyon?
+156	- Sabit mi, state'e göre güncelleniyor mu?
+157	
+158	#### 2.4 Aritmetik operasyonlar
+159	- +, -, %, ^, //, ~, &, |, <<, >>, bit.*, string.byte, string.char kullanımları.
+160	- Her operasyonun hangi ara değer üzerinde çalıştığını not et.
+161	
+162	#### 2.5 State makinesi
+163	- M, T nasıl güncelleniyor (örn. M = (M * 7 + 3) % 11)?
+164	- Her karakterde mi, her string'de mi, her blokta mı?
+165	- M, T birbirine bağımlı mı? Başlangıç değerleri sonradan değişiyor mu?
+166	
+167	#### 2.6 Çıktı uzunluğu
+168	- Sabit sayı mı, prefix mi, terminator mü, G[i] uzunluğundan mı?
+169	
+170	#### 2.7 Pseudocode
+171	- Tüm bilgileri birleştirip pseudocode yaz:
+172	
+173	function decode(encoded):
+174	    out = ""
+175	    state_m = M
+176	    state_t = T
+177	    for i in 1..len(encoded):
+178	        c = encoded[i]
+179	        idx = alphabet_index(c)
+180	        v = (idx - state_m) % len(alphabet)
+181	        v = v XOR key[state_t % len(key)]
+182	        out += char(v)
+183	        state_m = (state_m * 7 + 3) % 11
+184	        state_t = (state_t + 1) % len(key)
+185	    return out
+186	
+187	Çıktı: phase2_decoder_map.md.
+188	Durma koşulu: anlamadığın operasyon varsa (bilinmeyen bitwise trick) dur ve raporla. Tahmin etme.
+189	
+190	### FAZ 3 — DECODER YENİDEN YAZIMI VE SELF-CONSISTENCY TESTİ
+191	
+192	#### 3.1 Decoder'ı yaz
+193	- Python 3 (tercih) veya Lua 5.1 (gerekçeli), standalone, yorumlu.
+194	- Anahtar malzemesi (A, K, M, T) birebir aynı.
+195	
+196	#### 3.2 Self-consistency testi (payload'dan bağımsız)
+197	- Kendi sentetik string'ini ("hello_world_123") al.
+198	- Orijinal decoder'ın tersini uygula (encoder yaz) → encoded elde et.
+199	- Encoder çıktısını decoder'ına ver → orijinali geri al.
+200	- Test: encode("hello") → decode() == "hello".
+201	- Başarısızsa decoder yanlış; Faz 2'ye dön.
+202	
+203	#### 3.3 Edge case testleri
+204	- Boş string, tek karakter, alfabede olmayan karakter, 1000+ karakter, özel karakterler (null byte, newline).
+205	
+206	Çıktı: phase3_decoder.py + phase3_self_test_results.md.
+207	Durma koşulu: self-consistency geçmiyorsa Faz 2'ye dön.
+208	
+209	### FAZ 4 — TAM STRING DECODE
+210	
+211	#### 4.1 Tüm indeksleri çöz
+212	- G'deki her elemanı decoder'dan geçir.
+213	- İki blob varsa ikisini de çöz.
+214	- G[i] dışında inline encoded literal varsa onları da çöz.
+215	
+216	#### 4.2 Sayı doğrulaması
+217	- Decoded string sayısı == orijinal encoded indeks sayısı.
+218	- Uyuşmazlık → decoder yanlış; dur ve raporla.
+219	- Decode edilemeyen string'ler varsa ayrı listele.
+220	
+221	#### 4.3 Çıktı formatı
+222	- strings.json: {"index":"literal"} veya iki blob için {"blob1":{...},"blob2":{...}}.
+223	- İndeks bazı (G[1], G[0]) belirle.
+224	
+225	#### 4.4 Anlamlılık kontrolü
+226	- URL, event ismi, API çağrısı, mesaj metni var mı?
+227	- Hâlâ "obfuscated görünümlü" string varsa decoder yanlış olabilir.
+228	
+229	Çıktı: strings.json + phase4_decode_summary.md.
+230	Durma koşulu: %90'dan fazlası anlamsızsa Faz 2'ye dön.
+231	
+232	### FAZ 5 — INLINE TRANSFORMASYONU
+233	
+234	#### 5.1 Çağrı noktaları
+235	- decode(i), G[i], A:sub(...), string.char(...) erişimlerini tespit et.
+236	- Her erişimin indeksini belirle.
+237	- Dinamik indeks (G[variable]) varsa statik çözmeye çalış, çözemiyorsan işaretle.
+238	
+239	#### 5.2 Inline stratejisi
+240	- Tercih: AST tabanlı dönüşüm (Lua AST parse, decode(i) → literal).
+241	- Alternatif: regex, sadece çağrı noktaları net sınırlıysa (decode(\d+)).
+242	- 500+ karakterli literal'ler için "-- <inline string N>" yorumu + local S_N = "..." ayrı bölüm.
+243	- Escape'lere dikkat: \n, \t, \\, \", \xNN, \u{NNNN}.
+244	
+245	#### 5.3 Dinamik indeksleme
+246	- i'nin alabileceği değerleri statik çöz.
+247	- i = f(x) ve f safsa sembolik çöz.
+248	- Çözemiyorsan olduğu gibi bırak, raporda işaretle. Zorla inline etme.
+249	
+250	Çıktı: phase5_inline_log.md.
+251	Durma koşulu: dinamik indeks oranı %20'den fazlaysa stratejiyi gözden geçir.
+252	
+253	### FAZ 6 — LOADER SADELEŞTİRME
+254	
+255	#### 6.1 IIFE ve varargs
+256	- return(function(...) ... end) sarmalayıcısını aç.
+257	- ... gerçek argümanlarını belirle (genellikle _ENV veya script).
+258	- IIFE sadece scope için ise düz bloğa çevir.
+259	
+260	#### 6.2 State değişkenleri
+261	- M, T → anlamlı isim (state_m, counter_t).
+262	- Decoder dışında kullanılmıyorsa, decoder inline edildikten sonra sil.
+263	
+264	#### 6.3 Ölü kod
+265	- Çağrılmayan fonksiyon, okunmayan lokal, if false then ... end → sil.
+266	- İş mantığına dokunma; çağrılan fonksiyon ölü görünse bile silme.
+267	
+268	#### 6.4 Yeniden girintileme
+269	- Tutarlı girinti (2 veya 4).
+270	- Uzun satırları böl, değişken isimlerini tutarlı hale getir.
+271	
+272	#### 6.5 Kontrol akışı
+273	- Obfuscated jump, computed goto, coroutine kontrol akışı → düz if/while/for. Davranışı değiştirme.
+274	
+275	Çıktı: deobfuscated.lua.
+276	
+277	### FAZ 7 — DOĞRULAMA (payload'ı ÇALIŞTIRMADAN)
+278	
+279	#### 7.1 Statik doğrulamalar
+280	- deobfuscated.lua'da [==[ ... ]==] kalmadı mı?
+281	- decode(...) veya G[...] çağrısı kalmadı mı?
+282	- Claxfuscator string'i sadece yorumda mı?
+283	- Decoded string sayısı == orijinal indeks sayısı mı?
+284	
+285	#### 7.2 Syntax check
+286	- luac -p deobfuscated.lua (parse, çalıştırma değil).
+287	- Yoksa luaparser / luacheck.
+288	- Hata varsa düzelt, tekrar kontrol et.
+289	
+290	#### 7.3 Semantik doğrulama
+291	- Her decode(i) için karşılık gelen literal doğru mu?
+292	- Dinamik indeksler hâlâ aynı mı?
+293	- Statik olarak mantıksal eşdeğerliği kontrol et.
+294	
+295	#### 7.4 Diff analizi
+296	- diff -u original.lua deobfuscated.lua, her değişikliğin gerekçesini diff_summary.txt'ye yaz.
+297	
+298	Çıktı: phase7_verification.md + diff_summary.txt.
+299	Durma koşulu: syntax hatası veya string sayı uyuşmazlığı → önceki fazlara dön.
+300	
+301	### FAZ 8 — GÜVENLİK DEĞERLENDİRMESİ
+302	
+303	#### 8.1 Zararlılık göstergeleri
+304	- Ağ: http, https, socket, request, webhook, discord.com/api/webhooks, pastebin, telegram, curl, wget
+305	- Dosya: os.remove, os.execute, io.open (yazma), io.write (hassas path)
+306	- Credential: password, token, cookie, session, auth, login, api_key
+307	- Persistence: startup, autorun, registry, cron, systemd
+308	- Anti-debug: debug.getinfo, debug.sethook, jit.off, pcall ile hata yakalama
+309	- Obfuscation: string.dump, loadstring, load (dinamik kod)
+310	- Backdoor: socket, coroutine uzun bağlantı, os.time tetikleme
+311	
+312	#### 8.2 Risk seviyesi
+313	- TEMİZ-GÖRÜNÜMLÜ / BELİRSİZ / ZARARLI-MUHTEMEL / ZARARLI-KESİN
+314	
+315	#### 8.3 Göstergeleri listele
+316	- Her gösterge: dosya satırı, kod parçası, neden şüpheli.
+317	- Zararlıysa hangi veriyi hedeflediğini belirt.
+318	
+319	Çıktı: security_assessment.md.
+320	Durma koşulu: zararlıysa deobfuscated.lua'yı yine teslim et ama en üstte bayrakla.
+321	
+322	### FAZ 9 — RAPORLAMA
+323	
+324	analysis.md şablonu:
+325	
+326	# Claxfuscator V0.1 Analiz Raporu
+327	
+328	## 0. Güvenlik Özeti
+329	GÜVENLİK: [TEMİZ-GÖRÜNÜMLÜ | BELİRSİZ | ZARARLI-MUHTEMEL | ZARARLI-KESİN]
+330	[Kısa gerekçe]
+331	
+332	## 1. Dosya Bilgileri
+333	SHA-256, boyut, satır, tahmini Lua sürümü.
+334	
+335	## 2. Obfuscation Şeması
+336	Şema adı, teşhis yöntemi, alfabe, anahtar, state, blob sayısı/boyutları.
+337	
+338	## 3. Decoder Algoritması
+339	Pseudocode + adım adım açıklama.
+340	
+341	## 4. Anahtar Türetimi
+342	Nasıl hesaplanıyor, hangi state'te ne oluyor.
+343	
+344	## 5. Dikkat Çeken Hileler
+345	Kontrol akışı, upvalue yakalama, tablo-index yanıltması, dummy state.
+346	
+347	## 6. Zayıflıklar
+348	Alfabe statik, XOR key statik, state deterministik, decoder izole edilebilir.
+349	
+350	## 7. Gelecek Versiyon Riskleri
+351	Bu şema nasıl güçlendirilir, hangi değişiklik kırılmayı zorlaştırır.
+352	
+353	## 8. Deobfuscation Süreci
+354	Faz 0'dan 9'a kadar özet.
+355	
+356	## 9. Doğrulama Sonuçları
+357	[x] Header kaldırıldı
+358	[x] Encoded blob kalmadı
+359	[x] Decoder çağrısı kalmadı
+360	[x] luac -p geçti
+361	[x] String sayısı uyuştu
+362	
+363	## 10. Çözülemeyenler
+364	Varsa neyi çözemedin, neden.
+365	
+366	## 11. Ekler
+367	strings.json, decoder.py, deobfuscated.lua referansları.
+368	
+369	---
+370	
+371	## 7. TESLİMATLAR (15 dosya)
+372	
+373	1. analysis.md — Teknik rapor
+374	2. security_assessment.md — Güvenlik değerlendirmesi
+375	3. decoder.py — Standalone decoder
+376	4. strings.json — Çözülmüş string tablosu
+377	5. deobfuscated.lua — Temiz Lua kaynağı
+378	6. diff_summary.txt — Changelog
+379	7. confidence.md — Aşama başına güven yüzdesi
+380	8. phase0_baseline.json
+381	9. phase1_fingerprint.md
+382	10. phase2_decoder_map.md
+383	11. phase3_self_test_results.md
+384	12. phase4_decode_summary.md
+385	13. phase5_inline_log.md
+386	14. phase7_verification.md
+387	15. deobfuscated.luac (varsa)
+388	
+389	---
+390	
+391	## 8. ÇIKTI KURALLARI
+392	
+393	- Fenced code block, doğru dil etiketi (lua, python, json, markdown, bash).
+394	- analysis.md ~400 satır; toplu veri strings.json'a.
+395	- Deobfuscation tamamlanana kadar payload'ın iş mantığını özetleme; önce temiz kaynak, sonra açıklama.
+396	- Zararlıysa en üstte bayrakla, sonra rapora devam et.
+397	- Türkçe yaz (teknik terimler İngilizce: opcode, bytecode, upvalue, IIFE, XOR, base64).
+398	- Her faz sonunda 2-3 cümlelik özet: "Faz X tamamlandı, şu bulundu, şuraya geçiyorum."
+399	
+400	---
+401	
+402	## 9. DOĞRULAMA CHECKLIST
+403	
+404	- [ ] Claxfuscator V0.1 header'ı kodda yok (sadece yorumda).
+405	- [ ] deobfuscated.lua'da [==[ ... ]==] yok.
+406	- [ ] deobfuscated.lua'da decode(...) / G[i] yok.
+407	- [ ] luac -p geçiyor.
+408	- [ ] Decoded string sayısı == orijinal indeks sayısı.
+409	- [ ] Payload hiçbir aşamada çalıştırılmadı (sentetik testler hariç).
+410	- [ ] Bytecode (varsa) ayrı .luac ve sürüm belirtildi.
+411	- [ ] Güvenlik değerlendirmesi + bayrak var.
+412	- [ ] confidence.md dürüstçe dolduruldu.
+413	- [ ] Her fazın çıktısı ayrı dosya.
+414	
+415	---
+416	
+417	## 10. KALİTE ÇITASI
+418	
+419	- Doğruluk: Her iddia gösterilebilir kanıta dayanmalı.
+420	- Şeffaflık: Çözemediklerini açıkça söyle.
+421	- Tekrarlanabilirlik: decoder.py başkası tarafından çalıştırıldığında aynı sonucu vermeli.
+422	- Okunabilirlik: deobfuscated.lua insan tarafından okunabilmeli.
+423	- Güvenlik: Payload hiçbir aşamada çalıştırılmamalı.
+424	- Bütünlük: Tüm fazlar tamamlanmalı, hiçbiri atlanmamalı.
+425	
+426	Bu çıtayı karşılamayan çıktı başarısız sayılır.
+427	
+428	---
+429	
+430	## 11. BAŞLANGIÇ TALİMATI
+431	
+432	1. İlk 3 satırı birebir alıntıla, header'ı doğrula.
+433	2. Top-level local değişkenleri listele, her birinin rolünü yaz.
+434	3. phase0_baseline.json oluştur.
+435	4. phase1_fingerprint.md yaz.
+436	5. Ön raporu verdikten sonra Faz 2'ye geç.
+437	
+438	Zararlılık sinyali alırsan dur ve en üstte flag'le. Sessizce ilerlemek yasak.
+439	Çözemediğin kısım olursa dur ve raporla. Tahminle ilerlemek yasak.
+440	Faz uzarsa kapsamı daralt ama fazı atlama. Faz atlamak yasak.
+441	
+442	---
+443	
+444	## 12. SON NOT
+445	
+446	Bu görev uzun ve zorlu. Acele etme. Her fazı sindirerek ilerle. Bir fazı bitirmeden sonrakine geçme. Tıkandığın fazı "kısmi tamamlandı" olarak işaretle ve nedenini yaz, sonra devam et. Hiçbir fazı tamamen atlama.
+447	
+448	Başarılar.

@@ -1,0 +1,914 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claxfuscator — Lua &amp; Luau</title>
+<meta name="description" content="Lua 5.1–5.4 ve Luau için tarayıcıda çalışan çok katmanlı VM obfuscator. Kod sunucuya gitmez.">
+<style>
+  :root {
+    --bg: #070a0e;
+    --panel: #0d131a;
+    --panel-2: #0b1118;
+    --line: #1b2530;
+    --line-2: #26323f;
+    --text: #e7eef6;
+    --muted: #93a1b1;
+    --faint: #5f6d7d;
+    --accent: #9fe3b0;
+    --accent-ink: #06130b;
+    --accent-dim: rgba(159, 227, 176, .12);
+    --warn: #e6c98a;
+    --err: #e29a9a;
+    --radius: 14px;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 var(--sans);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  .bg {
+    position: fixed; inset: 0; z-index: -1;
+    background:
+      radial-gradient(1100px 620px at 12% -12%, rgba(86, 150, 116, .16), transparent 62%),
+      radial-gradient(900px 520px at 105% 0%, rgba(74, 110, 160, .12), transparent 58%),
+      linear-gradient(180deg, #070a0e 0%, #080c11 42%, #070a0e 100%);
+  }
+  .bg::after {
+    content: ""; position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px);
+    background-size: 44px 44px;
+    -webkit-mask-image: radial-gradient(820px 520px at 50% 0%, #000, transparent 76%);
+    mask-image: radial-gradient(820px 520px at 50% 0%, #000, transparent 76%);
+  }
+  .app { max-width: 1480px; margin: 0 auto; padding: 20px 26px 34px; }
+
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
+  .brand { display: flex; align-items: center; gap: 11px; }
+  .mark {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: grid; place-items: center;
+    border: 1px solid #2b4034;
+    background: linear-gradient(160deg, #14231b, #0b1210);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 8px 22px rgba(0,0,0,.35);
+  }
+  .mark svg { width: 19px; height: 19px; display: block; }
+  .brand-name { font: 700 14px/1.1 var(--sans); letter-spacing: .16em; }
+  .brand-sub { font: 600 9.5px/1.4 var(--sans); letter-spacing: .22em; color: var(--faint); margin-top: 3px; }
+  .top-right { display: flex; align-items: center; gap: 8px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid var(--line); border-radius: 99px;
+    padding: 5px 11px; font: 600 10.5px var(--sans); letter-spacing: .06em;
+    color: var(--muted); background: rgba(13,19,26,.7);
+  }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px rgba(159,227,176,.6); }
+  .pill.plain { color: var(--faint); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 258px minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(430px, 1fr) auto;
+    grid-template-areas: "opt in out" "opt log log";
+    gap: 14px;
+  }
+  .options { grid-area: opt; }
+  .pane-in { grid-area: in; }
+  .pane-out { grid-area: out; }
+  .log-panel { grid-area: log; }
+
+  .panel {
+    display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+    background: linear-gradient(180deg, rgba(255,255,255,.022), rgba(255,255,255,0) 34%), var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: 0 18px 50px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.03);
+  }
+
+  .options { padding: 16px; gap: 0; }
+  .section-label {
+    font: 600 10px var(--sans); letter-spacing: .16em; text-transform: uppercase;
+    color: var(--faint);
+  }
+  .field { display: block; margin-top: 15px; }
+  .field > .section-label { display: block; margin-bottom: 8px; }
+  .seg {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px;
+    background: #0a1016; border: 1px solid var(--line); border-radius: 10px; padding: 3px;
+  }
+  .seg button {
+    appearance: none; border: 0; background: transparent; color: var(--muted);
+    font: 600 11.5px var(--sans); padding: 7px 4px; border-radius: 7px; cursor: pointer;
+    transition: background .15s, color .15s, box-shadow .15s;
+  }
+  .seg button:hover { color: var(--text); }
+  .seg button.on { background: #16211b; color: var(--accent); box-shadow: inset 0 0 0 1px #26382d; }
+  .hint { display: block; color: var(--faint); font-size: 10.5px; margin-top: 7px; }
+
+  .seed-row { display: flex; gap: 6px; }
+  .seed-row input {
+    flex: 1; min-width: 0;
+    background: #0a1016; border: 1px solid var(--line); border-radius: 9px;
+    color: var(--text); font: 12px var(--mono); padding: 8px 10px; outline: 0;
+  }
+  .seed-row input:focus { border-color: #33513f; box-shadow: 0 0 0 3px rgba(159,227,176,.08); }
+  .icon-btn {
+    width: 35px; flex: 0 0 auto; display: grid; place-items: center;
+    background: #0c141c; border: 1px solid var(--line-2); border-radius: 9px;
+    color: var(--muted); cursor: pointer;
+  }
+  .icon-btn:hover { color: var(--text); border-color: #33424f; }
+  .icon-btn svg { width: 15px; height: 15px; }
+
+  .switch-row { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; cursor: pointer; margin-top: 6px; }
+  .switch-row input { position: absolute; opacity: 0; pointer-events: none; }
+  .switch {
+    width: 34px; height: 20px; border-radius: 99px; flex: 0 0 auto; margin-top: 2px;
+    background: #182230; border: 1px solid #243140; position: relative; transition: .18s;
+  }
+  .switch::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+    border-radius: 50%; background: #6d7c8d; transition: .18s;
+  }
+  .switch-row input:checked + .switch { background: #1b3024; border-color: #2f4a39; }
+  .switch-row input:checked + .switch::after { left: 16px; background: var(--accent); }
+  .switch-row input:focus-visible + .switch { outline: 2px solid rgba(159,227,176,.35); outline-offset: 2px; }
+  .switch-row b { display: block; font: 600 12px/1.3 var(--sans); color: #dbe5ef; }
+  .switch-row small { display: block; color: var(--faint); font-size: 10.5px; margin-top: 2px; }
+
+  .primary {
+    width: 100%; margin-top: 16px; padding: 11px 14px; border-radius: 10px;
+    border: 1px solid #3c6b4c; color: var(--accent-ink);
+    background: linear-gradient(180deg, #abeebb, #8fd8a2);
+    font: 700 13px var(--sans); letter-spacing: .02em; cursor: pointer;
+    box-shadow: 0 8px 20px rgba(60,107,76,.18), inset 0 1px 0 rgba(255,255,255,.35);
+    transition: filter .15s, transform .1s, opacity .15s;
+  }
+  .primary:hover { filter: brightness(1.04); }
+  .primary:active { transform: translateY(1px); }
+  .primary:disabled { opacity: .65; cursor: progress; }
+  .kbd-hint { text-align: center; color: var(--faint); font-size: 10px; margin-top: 7px; letter-spacing: .04em; }
+
+  .divider { height: 1px; background: var(--line); margin: 18px 0 14px; }
+  .stats { margin: 10px 0 0; }
+  .stats > div {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    padding: 6px 0; border-bottom: 1px dashed rgba(31,42,54,.8);
+  }
+  .stats > div:last-child { border-bottom: 0; }
+  .stats dt { color: var(--faint); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; }
+  .stats dd { margin: 0; color: #c9d5e2; font: 11.5px var(--mono); }
+  .rail-note { margin: 14px 0 0; color: var(--faint); font-size: 10px; line-height: 1.6; }
+
+  .pane-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    height: 40px; padding: 0 14px; border-bottom: 1px solid var(--line);
+    background: rgba(255,255,255,.012); flex: 0 0 auto;
+  }
+  .tabs { display: flex; gap: 16px; }
+  .tab {
+    position: relative; font: 600 10.5px var(--sans); letter-spacing: .13em;
+    text-transform: uppercase; color: var(--faint); padding: 12px 0 11px;
+  }
+  .tab.on { color: #cfdae6; }
+  .tab.on::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+    background: var(--accent); box-shadow: 0 0 8px rgba(159,227,176,.5);
+  }
+  .pane-meta { color: var(--faint); font: 10.5px var(--mono); white-space: nowrap; }
+
+  .editor { position: relative; flex: 1 1 auto; min-height: 0; }
+  .editor textarea {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    resize: none; border: 0; outline: 0; background: transparent;
+    color: #dbe6f1; font: 12.5px/1.65 var(--mono); padding: 14px 16px; tab-size: 2;
+    caret-color: var(--accent);
+  }
+  .editor textarea::placeholder { color: #43505f; }
+  .editor.over { background: rgba(159,227,176,.035); box-shadow: inset 0 0 0 1px #3c6b4c; }
+  .pane-out .editor textarea { color: #c5d2df; }
+
+  .pane-foot {
+    display: flex; align-items: center; gap: 8px;
+    min-height: 44px; padding: 7px 12px; border-top: 1px solid var(--line);
+    background: rgba(255,255,255,.012); flex: 0 0 auto;
+  }
+  .spacer { flex: 1 1 auto; }
+  .ghost {
+    appearance: none; border: 1px solid var(--line-2); background: #0c141c;
+    color: var(--muted); font: 600 11px var(--sans); padding: 6px 10px;
+    border-radius: 7px; cursor: pointer; transition: .15s; white-space: nowrap;
+  }
+  .ghost:hover { color: var(--text); border-color: #33424f; }
+  .ghost:disabled { opacity: .38; cursor: not-allowed; }
+  .foot-note { color: var(--faint); font: 10px var(--mono); }
+  .foot-note.ok { color: var(--accent); }
+
+  .log-panel { max-height: 210px; }
+  .badge {
+    min-width: 20px; text-align: center; border-radius: 99px; padding: 2px 7px;
+    background: #121b24; border: 1px solid var(--line); color: var(--muted);
+    font: 10px var(--mono);
+  }
+  .badge.err { color: var(--err); border-color: #4a2a2e; background: #1b1113; }
+  .badge.warn { color: var(--warn); border-color: #4a3e28; background: #1a1610; }
+  .log { overflow: auto; padding: 8px 14px 12px; font: 11.5px/1.6 var(--mono); }
+  .log .empty { color: var(--faint); padding: 10px 2px; }
+  .entry { display: flex; gap: 12px; padding: 6px 0; border-bottom: 1px solid rgba(27,37,48,.55); }
+  .entry:last-child { border-bottom: 0; }
+  .entry .pos { flex: 0 0 auto; color: var(--faint); min-width: 44px; }
+  .entry .body { min-width: 0; flex: 1 1 auto; }
+  .entry .msg { color: #c6d2df; word-break: break-word; }
+  .entry.err .pos { color: var(--err); }
+  .entry.err .msg { color: #e7b9b9; }
+  .entry.warn .pos { color: var(--warn); }
+  .entry.warn .msg { color: #e3d2a9; }
+  .entry.ok .pos { color: var(--accent); }
+  .entry.ok .msg { color: #cfe8d6; }
+  .excerpt {
+    margin: 5px 0 2px; padding: 6px 9px; border-radius: 6px;
+    background: #0a1016; border: 1px solid #1a2430; color: #9fb0c2;
+    font: 11px/1.55 var(--mono); overflow-x: auto; white-space: pre;
+  }
+  .excerpt .caret { color: var(--err); }
+
+  .footer {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+    margin-top: 16px; color: var(--faint); font-size: 10.5px;
+  }
+  .footer .sep { opacity: .5; margin: 0 7px; }
+
+  @media (max-width: 1120px) {
+    .grid {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-rows: auto minmax(400px, 1fr) auto;
+      grid-template-areas: "opt opt" "in out" "log log";
+    }
+    .options { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; }
+    .options .divider, .options .rail-note, .options .kbd-hint { grid-column: 1 / -1; }
+    .options .primary { grid-column: 1 / -1; }
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; }
+  }
+  @media (max-width: 760px) {
+    .app { padding: 14px 14px 28px; }
+    .grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: 360px 360px auto auto; grid-template-areas: "in" "out" "opt" "log"; }
+    .options { grid-template-columns: 1fr; }
+    .brand-sub { display: none; }
+    .footer { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#9fe3b0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2.5 20 6v6.2c0 4.6-3.3 7.7-8 9.3-4.7-1.6-8-4.7-8-9.3V6l8-3.5Z"/>
+          <path d="M9.2 12.2h5.6M12 9.4v5.6"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">CLAXFUSCATOR</div>
+        <div class="brand-sub">VM OBFUSCATOR</div>
+      </div>
+    </div>
+    <div class="top-right">
+      <span class="pill"><span class="dot"></span>client-side</span>
+      <span class="pill plain">v1.1</span>
+    </div>
+  </header>
+
+  <main class="grid">
+    <aside class="panel options">
+      <div class="section-label">Derleme</div>
+
+      <label class="field">
+        <span class="section-label">Koruma seviyesi</span>
+        <div class="seg" id="strength" role="group" aria-label="Koruma seviyesi">
+          <button type="button" data-v="1" class="on">Standart</button>
+          <button type="button" data-v="2">Güçlü</button>
+          <button type="button" data-v="3">Maksimum</button>
+        </div>
+        <span class="hint" id="strengthHint">Ölü kod + 12 sahte opcode.</span>
+      </label>
+
+      <label class="field">
+        <span class="section-label">Seed</span>
+        <div class="seed-row">
+          <input id="seed" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Derleme seed">
+          <button type="button" class="icon-btn" id="dice" title="Rastgele seed" aria-label="Rastgele seed">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+              <rect x="3.5" y="3.5" width="17" height="17" rx="4"/>
+              <circle cx="8.5" cy="8.5" r="1.1" fill="currentColor" stroke="none"/>
+              <circle cx="15.5" cy="15.5" r="1.1" fill="currentColor" stroke="none"/>
+              <circle cx="15.5" cy="8.5" r="1.1" fill="currentColor" stroke="none"/>
+              <circle cx="8.5" cy="15.5" r="1.1" fill="currentColor" stroke="none"/>
+            </svg>
+          </button>
+        </div>
+        <span class="hint">Aynı seed aynı çıktıyı üretir.</span>
+      </label>
+
+      <label class="switch-row">
+        <input id="deadcode" type="checkbox" checked>
+        <span class="switch" aria-hidden="true"></span>
+        <span><b>Ölü kod ekle</b><small>Ulaşılamaz bloklarla şişir</small></span>
+      </label>
+
+      <label class="switch-row">
+        <input id="allow" type="checkbox">
+        <span class="switch" aria-hidden="true"></span>
+        <span><b>Best-effort</b><small>Syntax hatasında kalanı derle</small></span>
+      </label>
+
+      <button type="button" class="primary" id="run">Obfuscate</button>
+      <div class="kbd-hint">Ctrl + Enter</div>
+
+      <div class="divider"></div>
+      <div class="section-label">Çıktı</div>
+      <dl class="stats">
+        <div><dt>Boyut</dt><dd id="stSize">—</dd></div>
+        <div><dt>Protos</dt><dd id="stProto">—</dd></div>
+        <div><dt>Dizeler</dt><dd id="stStr">—</dd></div>
+        <div><dt>Opcode</dt><dd id="stOps">—</dd></div>
+        <div><dt>Checksum</dt><dd id="stSum">—</dd></div>
+        <div><dt>Süre</dt><dd id="stTime">—</dd></div>
+      </dl>
+      <p class="rail-note">Derleme tamamen tarayıcıda çalışır. Kaynak kod hiçbir sunucuya gönderilmez.</p>
+    </aside>
+
+    <section class="panel pane-in">
+      <div class="pane-head">
+        <div class="tabs"><span class="tab on">Kaynak</span></div>
+        <div class="pane-meta"><span id="inMeta">0 B · 0 satır</span></div>
+      </div>
+      <div class="editor" id="drop">
+        <textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off"
+          placeholder="-- Lua veya Luau kodunu buraya yapıştır, sürükle ya da dosya aç."></textarea>
+      </div>
+      <div class="pane-foot">
+        <button type="button" class="ghost" id="open">Dosya aç</button>
+        <button type="button" class="ghost" id="sample">Örnek yükle</button>
+        <span class="spacer"></span>
+        <span class="foot-note">.lua / .luau</span>
+        <input type="file" id="file" accept=".lua,.luau,.txt,text/plain" hidden>
+      </div>
+    </section>
+
+    <section class="panel pane-out">
+      <div class="pane-head">
+        <div class="tabs"><span class="tab on">Obfuscated</span></div>
+        <div class="pane-meta"><span id="outMeta">—</span></div>
+      </div>
+      <div class="editor">
+        <textarea id="out" readonly spellcheck="false" placeholder="Derleme çıktısı burada görünecek."></textarea>
+      </div>
+      <div class="pane-foot">
+        <button type="button" class="ghost" id="copy" disabled>Kopyala</button>
+        <button type="button" class="ghost" id="download" disabled>İndir</button>
+        <span class="spacer"></span>
+        <span class="foot-note" id="outState">hazır değil</span>
+      </div>
+    </section>
+
+    <section class="panel log-panel">
+      <div class="pane-head">
+        <div class="tabs"><span class="tab on">Tanılama</span></div>
+        <div class="pane-meta"><span class="badge" id="diagCount">0</span></div>
+      </div>
+      <div class="log" id="log" aria-live="polite">
+        <div class="empty">Henüz derleme yok. Kaynağı yapıştır ve Obfuscate'e bas.</div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div>Lua 5.1 – 5.4 &amp; Luau<span class="sep">·</span>VM bytecode<span class="sep">·</span>polymorphic string cipher</div>
+    <div>Tarayıcıda çalışır<span class="sep">·</span>kod dışarı çıkmaz</div>
+  </footer>
+</div>
+
+<script>/*__FENGARI__*/</script>
+<script>
+'use strict';
+
+var MODULE_B64 = /*__MODULES__*/;
+var DRIVER_B64 = /*__DRIVER__*/;
+
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var srcEl = $('src'), outEl = $('out'), logEl = $('log');
+  var runBtn = $('run'), copyBtn = $('copy'), downloadBtn = $('download');
+  var diagBadge = $('diagCount'), outState = $('outState'), outMeta = $('outMeta');
+  var drop = $('drop'), fileInput = $('file');
+  var currentName = 'script.lua';
+  var lastOutput = '';
+  var busy = false;
+  var strength = 1;
+
+  var PRESETS = {
+    1: { density: 1, decoys: 12 },
+    2: { density: 2, decoys: 24 },
+    3: { density: 3, decoys: 40 }
+  };
+  var HINTS = {
+    1: 'Ölü kod + 12 sahte opcode.',
+    2: '2× ölü kod + 24 sahte opcode.',
+    3: '3× ölü kod + 40 sahte opcode. Daha büyük çıktı.'
+  };
+
+  var SAMPLE = [
+    '-- Claxfuscator örneği: closure, tablo, metot ve Luau sözdizimi',
+    'local Account = {}',
+    'Account.__index = Account',
+    '',
+    'function Account.new(owner: string, balance: number)',
+    '  return setmetatable({ owner = owner, balance = balance }, Account)',
+    'end',
+    '',
+    'function Account:deposit(amount: number)',
+    '  self.balance += amount',
+    '  return self.balance',
+    'end',
+    '',
+    'function Account:describe(): string',
+    '  return `{self.owner}: {self.balance} TL`',
+    'end',
+    '',
+    'local acc = Account.new("Claxfuscator", 100)',
+    'acc:deposit(250)',
+    '',
+    'local squares = {}',
+    'for i = 1, 6 do',
+    '  if i % 2 == 0 then continue end',
+    '  squares[#squares + 1] = tostring(i * i)',
+    'end',
+    '',
+    'print(acc:describe())',
+    'print(table.concat(squares, ","))'
+  ].join('\n');
+
+  function decodeB64(text) {
+    var bin = atob(text);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder('utf-8').decode(bytes);
+  }
+
+  var MODULES = {};
+  Object.keys(MODULE_B64).forEach(function (name) {
+    MODULES[name] = decodeB64(MODULE_B64[name]);
+  });
+  var DRIVER = decodeB64(DRIVER_B64);
+
+  function luaLongString(text) {
+    var level = 0;
+    for (;;) {
+      var close = ']' + new Array(level + 1).join('=') + ']';
+      if (text.indexOf(close) < 0) {
+        return '[' + new Array(level + 1).join('=') + '[' + text + close;
+      }
+      level++;
+    }
+  }
+
+  function assemble(source, opts) {
+    var chunk = [
+      'local __M = {}',
+      'local __C = {}',
+      'local __real = require',
+      'function require(n)',
+      '  local v = __C[n]',
+      '  if v ~= nil then return v end',
+      '  local s = __M[n]',
+      '  if not s then return __real(n) end',
+      '  local fn, err = load(s, "@" .. n)',
+      '  if not fn then error(err, 0) end',
+      '  v = fn()',
+      '  if v == nil then v = true end',
+      '  __C[n] = v',
+      '  return v',
+      'end'
+    ];
+    Object.keys(MODULES).forEach(function (name) {
+      chunk.push('__M[' + JSON.stringify(name) + '] = ' + luaLongString(MODULES[name]));
+    });
+    chunk.push('__SRC = ' + luaLongString(source));
+    chunk.push('__SEED = ' + opts.seed);
+    chunk.push('__DEAD = ' + (opts.deadcode ? 'true' : 'false'));
+    chunk.push('__ALLOW = ' + (opts.allow ? 'true' : 'false'));
+    chunk.push('__DENSITY = ' + opts.density);
+    chunk.push('__DECOYS = ' + opts.decoys);
+    chunk.push(DRIVER);
+    return chunk.join('\n');
+  }
+
+  // The Lua driver percent-escapes every non-ASCII byte, so frame lengths are
+  // character counts too. Undo that here before rendering.
+  function decodeFrameBytes(text) {
+    var out = '';
+    for (var i = 0; i < text.length; i++) {
+      var ch = text.charAt(i);
+      if (ch === '%' && i + 2 < text.length) {
+        var hex = text.substr(i + 1, 2);
+        if (/^[0-9A-Fa-f]{2}$/.test(hex)) {
+          out += String.fromCharCode(parseInt(hex, 16));
+          i += 2;
+          continue;
+        }
+      }
+      out += ch;
+    }
+    return out;
+  }
+
+  function bytesToText(bin) {
+    if (!/[^\x00-\x7f]/.test(bin)) return bin;
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder('utf-8').decode(bytes);
+  }
+
+  function parseFrame(raw) {
+    var text = String(raw == null ? '' : raw);
+    var p1 = text.indexOf('\u0001');
+    if (p1 < 0) return { status: 'CRASH', payload: '', stats: '', diag: text };
+    var p2 = text.indexOf('\u0001', p1 + 1);
+    var status = text.slice(0, p1);
+    var len = parseInt(text.slice(p1 + 1, p2), 10) || 0;
+    var payload = bytesToText(decodeFrameBytes(text.slice(p2 + 1, p2 + 1 + len)));
+    var rest = text.slice(p2 + 1 + len + 1);
+    var p3 = rest.indexOf('\u0001');
+    return {
+      status: status,
+      payload: payload,
+      stats: p3 < 0 ? rest : rest.slice(0, p3),
+      diag: p3 < 0 ? '' : bytesToText(decodeFrameBytes(rest.slice(p3 + 1)))
+    };
+  }
+
+  function parseDiagnostics(text) {
+    var lines = srcEl.value.split('\n');
+    return String(text || '').split('\n').filter(Boolean).map(function (line) {
+      var m = /^(\d+):(\d+):(.*)$/.exec(line);
+      if (!m) return { kind: 'err', pos: '—', msg: line, source: '', col: 0 };
+      var ln = parseInt(m[1], 10), col = parseInt(m[2], 10);
+      return {
+        kind: 'err',
+        pos: ln + ':' + col,
+        msg: m[3],
+        source: lines[ln - 1] || '',
+        col: col
+      };
+    });
+  }
+
+  function renderLog(entries) {
+    logEl.textContent = '';
+    if (!entries.length) {
+      var empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = 'Henüz derleme yok.';
+      logEl.appendChild(empty);
+      return;
+    }
+    entries.forEach(function (e) {
+      var row = document.createElement('div');
+      row.className = 'entry ' + (e.kind || 'ok');
+      var pos = document.createElement('span');
+      pos.className = 'pos';
+      pos.textContent = e.pos || '—';
+      var body = document.createElement('div');
+      body.className = 'body';
+      var msg = document.createElement('div');
+      msg.className = 'msg';
+      msg.textContent = e.msg;
+      body.appendChild(msg);
+      if (e.source) {
+        var pre = document.createElement('pre');
+        pre.className = 'excerpt';
+        pre.textContent = e.source;
+        if (e.col && e.col > 0) {
+          var caret = document.createElement('span');
+          caret.className = 'caret';
+          caret.textContent = '\n' + new Array(Math.min(e.col, e.source.length + 1)).join(' ') + '^';
+          pre.appendChild(caret);
+        }
+        body.appendChild(pre);
+      }
+      row.appendChild(pos);
+      row.appendChild(body);
+      logEl.appendChild(row);
+    });
+  }
+
+  function setBadge(count, kind) {
+    diagBadge.textContent = String(count);
+    diagBadge.className = 'badge' + (kind ? ' ' + kind : '');
+  }
+
+  function fmtBytes(n) {
+    n = Number(n) || 0;
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1048576).toFixed(2) + ' MB';
+  }
+
+  function fmtInt(n) {
+    return String(n == null ? '—' : n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  }
+
+  function updateMeta() {
+    var s = srcEl.value;
+    var bytes = new TextEncoder().encode(s).length;
+    var lines = s ? s.split('\n').length : 0;
+    $('inMeta').textContent = fmtBytes(bytes) + ' · ' + lines + ' satır';
+  }
+
+  function setOutput(text) {
+    lastOutput = text || '';
+    outEl.value = lastOutput;
+    copyBtn.disabled = !lastOutput;
+    downloadBtn.disabled = !lastOutput;
+    if (!lastOutput) outState.textContent = 'hazır değil';
+  }
+
+  function resetStats() {
+    ['stSize', 'stProto', 'stStr', 'stOps', 'stSum', 'stTime'].forEach(function (id) {
+      $(id).textContent = '—';
+    });
+  }
+
+  function randomSeed() {
+    if (window.crypto && window.crypto.getRandomValues) {
+      var a = new Uint32Array(1);
+      window.crypto.getRandomValues(a);
+      return String(a[0] >>> 0);
+    }
+    return String(Math.floor(Math.random() * 4294967296));
+  }
+
+  function currentSeed() {
+    var raw = $('seed').value.trim();
+    if (!/^\d+$/.test(raw)) return null;
+    var n = Number(raw);
+    if (!isFinite(n) || n < 0 || n > 4294967295) return null;
+    return Math.floor(n);
+  }
+
+  function statusMessage(status) {
+    if (status === 'PARSE') return 'Syntax hatası — çıktı yazılmadı.';
+    if (status === 'RESOLVE') return 'Çözümleme hatası — çıktı yazılmadı.';
+    if (status === 'COMPILE') return 'Derleme hatası — çıktı yazılmadı.';
+    if (status === 'GEN') return 'Kod üretimi başarısız oldu.';
+    if (status === 'INVALID') return 'Üretilen Lua doğrulanamadı.';
+    return 'Beklenmeyen hata.';
+  }
+
+  function build() {
+    if (busy) return;
+    var source = srcEl.value;
+    if (!source.trim()) {
+      setBadge(1, 'warn');
+      renderLog([{ kind: 'warn', pos: '—', msg: 'Kaynak boş. Önce bir Lua/Luau dosyası yükle.' }]);
+      return;
+    }
+    var seed = currentSeed();
+    if (seed === null) {
+      setBadge(1, 'warn');
+      renderLog([{ kind: 'warn', pos: 'seed', msg: 'Seed 0 ile 4294967295 arasında bir tam sayı olmalı.' }]);
+      $('seed').focus();
+      return;
+    }
+    if (!window.fengari || typeof window.fengari.load !== 'function') {
+      setBadge(1, 'err');
+      renderLog([{ kind: 'err', pos: '—', msg: 'Lua VM yüklenemedi. Sayfayı yenileyip tekrar dene.' }]);
+      return;
+    }
+
+    busy = true;
+    runBtn.disabled = true;
+    runBtn.textContent = 'Derleniyor…';
+    var started = performance.now();
+
+    setTimeout(function () {
+      try {
+        var preset = PRESETS[strength];
+        var chunk = assemble(source, {
+          seed: seed,
+          deadcode: $('deadcode').checked,
+          allow: $('allow').checked,
+          density: preset.density,
+          decoys: preset.decoys
+        });
+        var raw = window.fengari.load(chunk)();
+        var frame = parseFrame(raw);
+        var elapsed = Math.max(1, Math.round(performance.now() - started));
+
+        if (frame.status === 'OK') {
+          var stats = frame.stats.split('|').map(Number);
+          var bytes = stats[3] || frame.payload.length;
+          var inputBytes = new TextEncoder().encode(source).length;
+          var entries = [{
+            kind: 'ok',
+            pos: 'OK',
+            msg: 'Derleme tamam · ' + fmtBytes(bytes) + ' · seed ' + seed +
+              ' · ' + preset.decoys + ' decoy · ' + elapsed + ' ms'
+          }];
+          var warnings = parseDiagnostics(frame.diag);
+          warnings.forEach(function (w) { entries.push(w); });
+
+          setOutput(frame.payload);
+          $('stSize').textContent = fmtBytes(bytes);
+          $('stProto').textContent = fmtInt(stats[0]);
+          $('stStr').textContent = fmtInt(stats[1]);
+          $('stOps').textContent = stats[4] + ' + ' + stats[5];
+          $('stSum').textContent = fmtInt(stats[2]);
+          $('stTime').textContent = elapsed + ' ms';
+          var ratio = inputBytes > 0 ? (bytes / inputBytes).toFixed(1) : '0';
+          outMeta.textContent = fmtBytes(bytes) + ' · ' + ratio + '×';
+          outState.textContent = '✓ hazır';
+          outState.className = 'foot-note ok';
+          setBadge(warnings.length, warnings.length ? 'warn' : '');
+          renderLog(entries);
+        } else {
+          setOutput('');
+          resetStats();
+          outMeta.textContent = '—';
+          outState.textContent = 'hata';
+          outState.className = 'foot-note';
+          var diags = parseDiagnostics(frame.diag);
+          if (!diags.length) {
+            diags = [{ kind: 'err', pos: '—', msg: statusMessage(frame.status) }];
+          } else {
+            diags.unshift({ kind: 'err', pos: '—', msg: statusMessage(frame.status) });
+          }
+          setBadge(diags.length, 'err');
+          renderLog(diags);
+        }
+      } catch (err) {
+        setOutput('');
+        resetStats();
+        outState.textContent = 'hata';
+        outState.className = 'foot-note';
+        setBadge(1, 'err');
+        renderLog([{
+          kind: 'err',
+          pos: '—',
+          msg: 'Beklenmeyen hata: ' + (err && err.message ? err.message : String(err))
+        }]);
+      } finally {
+        busy = false;
+        runBtn.disabled = false;
+        runBtn.textContent = 'Obfuscate';
+      }
+    }, 40);
+  }
+
+  function loadFile(file) {
+    if (!file) return;
+    currentName = file.name || 'script.lua';
+    var reader = new FileReader();
+    reader.onload = function () {
+      srcEl.value = String(reader.result || '');
+      updateMeta();
+      setBadge(0, '');
+      renderLog([{ kind: 'ok', pos: '—', msg: currentName + ' yüklendi.' }]);
+      srcEl.focus();
+    };
+    reader.onerror = function () {
+      setBadge(1, 'err');
+      renderLog([{ kind: 'err', pos: '—', msg: 'Dosya okunamadı.' }]);
+    };
+    reader.readAsText(file, 'utf-8');
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function (resolve, reject) {
+      try {
+        outEl.focus();
+        outEl.select();
+        var ok = document.execCommand('copy');
+        ok ? resolve() : reject(new Error('copy failed'));
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  $('strength').addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-v]');
+    if (!btn) return;
+    strength = Number(btn.getAttribute('data-v'));
+    Array.prototype.forEach.call(this.querySelectorAll('button'), function (b) {
+      b.classList.toggle('on', b === btn);
+    });
+    $('strengthHint').textContent = HINTS[strength];
+  });
+
+  $('dice').addEventListener('click', function () {
+    $('seed').value = randomSeed();
+  });
+
+  runBtn.addEventListener('click', build);
+  $('open').addEventListener('click', function () { fileInput.click(); });
+  $('sample').addEventListener('click', function () {
+    srcEl.value = SAMPLE;
+    currentName = 'sample.luau';
+    updateMeta();
+    setBadge(0, '');
+    renderLog([{ kind: 'ok', pos: '—', msg: 'Örnek kaynak yüklendi.' }]);
+  });
+
+  fileInput.addEventListener('change', function () {
+    loadFile(fileInput.files && fileInput.files[0]);
+    fileInput.value = '';
+  });
+
+  copyBtn.addEventListener('click', function () {
+    if (!lastOutput) return;
+    copyText(lastOutput).then(function () {
+      outState.textContent = '✓ kopyalandı';
+      setTimeout(function () { if (lastOutput) outState.textContent = '✓ hazır'; }, 1400);
+    }).catch(function () {
+      outState.textContent = 'kopyalanamadı';
+    });
+  });
+
+  downloadBtn.addEventListener('click', function () {
+    if (!lastOutput) return;
+    var name = currentName.replace(/\.(lua|luau|txt)$/i, '') || 'script';
+    var blob = new Blob([lastOutput], { type: 'text/x-lua;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = name + '.obf.lua';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+  });
+
+  srcEl.addEventListener('input', updateMeta);
+
+  srcEl.addEventListener('keydown', function (e) {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      var start = this.selectionStart, end = this.selectionEnd;
+      this.value = this.value.slice(0, start) + '  ' + this.value.slice(end);
+      this.selectionStart = this.selectionEnd = start + 2;
+      updateMeta();
+    }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      build();
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === 'o' || e.key === 'O')) {
+      e.preventDefault();
+      fileInput.click();
+    }
+  });
+
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) {
+      e.preventDefault();
+      drop.classList.add('over');
+    });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) {
+      e.preventDefault();
+      drop.classList.remove('over');
+    });
+  });
+  drop.addEventListener('drop', function (e) {
+    var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    loadFile(file);
+  });
+
+  window.addEventListener('dragover', function (e) { e.preventDefault(); });
+  window.addEventListener('drop', function (e) { e.preventDefault(); });
+
+  $('seed').value = randomSeed();
+  updateMeta();
+  resetStats();
+})();
+</script>
+</body>
+</html>

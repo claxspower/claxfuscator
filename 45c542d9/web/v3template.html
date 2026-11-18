@@ -1,0 +1,1371 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Claxfuscator V0.2 — Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23ff0033'/%3E%3Cpath d='M5 5.5 8 8l-3 2.5M8.5 11h3' stroke='%23fff' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            bg: '#050505',
+            surface: '#0f0f11',
+            'surface-light': '#1a1a1e',
+            fg: '#ffffff',
+            muted: '#a1a1aa',
+            red: '#ff0033',
+            'red-dark': '#cc0029',
+            border: '#27272a',
+          },
+          fontFamily: {
+            sans: ['Quicksand', 'sans-serif'],
+            candy: ['Fredoka', 'sans-serif'],
+            mono: ['Fira Code', 'ui-monospace', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Quicksand:wght@500;600;700&family=Fira+Code:wght@400;500&display=swap');
+    
+    * { -webkit-tap-highlight-color: transparent; }
+    
+    body { 
+      background-color: #050505; 
+      color: #ffffff; 
+      font-family: 'Quicksand', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      background-image: 
+        linear-gradient(rgba(255, 0, 51, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 0, 51, 0.025) 1px, transparent 1px);
+      background-size: 28px 28px;
+      overscroll-behavior: none;
+    }
+    
+    .font-candy { font-family: 'Fredoka', sans-serif; }
+    .font-mono { font-family: 'Fira Code', monospace; }
+
+    /* Tab Transitions */
+    .tab-pane {
+      display: none;
+      opacity: 0;
+      transform: translateY(12px);
+      transition: opacity 0.35s ease-out, transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .tab-pane.active { display: block; }
+    .tab-pane.visible { opacity: 1; transform: translateY(0); }
+
+    /* Buttons */
+    button { 
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
+      position: relative;
+      overflow: hidden;
+    }
+    button:active:not(:disabled) { transform: scale(0.97); }
+    
+    .btn-primary { 
+      background: #ff0033; 
+      color: #fff; 
+      border-radius: 12px; 
+      box-shadow: 0 4px 14px rgba(255, 0, 51, 0.3); 
+    }
+    .btn-primary:hover:not(:disabled) { 
+      background: #ff1a4a; 
+      box-shadow: 0 6px 20px rgba(255, 0, 51, 0.45); 
+    }
+    .btn-primary:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    
+    .btn-secondary {
+      background: #1a1a1e;
+      border: 1.5px solid #27272a;
+      color: #fff;
+      border-radius: 12px;
+    }
+    .btn-secondary:hover:not(:disabled) {
+      border-color: #52525b;
+      background: #27272a;
+    }
+
+    /* Cards */
+    .card { 
+      border: 1px solid #27272a; 
+      border-radius: 16px; 
+      background: #0f0f11; 
+      transition: border-color 0.25s ease, box-shadow 0.25s ease; 
+      position: relative;
+    }
+    .card::before, .card::after { 
+      content: ''; position: absolute; width: 10px; height: 10px; 
+      border: 2px solid #ff0033; opacity: 0.25; transition: opacity 0.25s; pointer-events: none; 
+    }
+    .card::before { top: -1px; left: -1px; border-right: none; border-bottom: none; border-top-left-radius: 16px; }
+    .card::after { bottom: -1px; right: -1px; border-left: none; border-top: none; border-bottom-right-radius: 16px; }
+    .card:hover::before, .card:hover::after { opacity: 0.7; }
+    .card:hover { border-color: rgba(255, 0, 51, 0.25); }
+    
+    /* Navigation */
+    .nav-item { 
+      display: flex; align-items: center; gap: 12px; padding: 13px 16px; 
+      border-radius: 12px; font-size: 15px; font-weight: 700; color: #a1a1aa; cursor: pointer; 
+      border-left: 3px solid transparent;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    .nav-item:hover { background-color: #1a1a1e; color: #ffffff; }
+    .nav-item.active { background-color: rgba(255, 0, 51, 0.1); color: #ff0033; border-left-color: #ff0033; }
+
+    /* Progress Ring */
+    .progress-ring__circle {
+      transition: stroke-dashoffset 0.1s linear; 
+      transform: rotate(-90deg); 
+      transform-origin: 50% 50%;
+      stroke: #ff0033; 
+      stroke-linecap: round;
+    }
+    
+    /* File Zone */
+    .file-zone { 
+      border: 2px dashed #3f3f46; 
+      transition: all 0.25s ease; 
+      background: #050505; 
+      border-radius: 14px; 
+    }
+    .file-zone:hover, .file-zone.dragover { 
+      border-color: #ff0033; 
+      background: rgba(255, 0, 51, 0.04); 
+      box-shadow: inset 0 0 24px rgba(255, 0, 51, 0.06);
+    }
+    
+    /* Toggle Switch */
+    .tech-switch { position: relative; display: inline-block; width: 46px; height: 26px; flex-shrink: 0; }
+    .tech-switch input { opacity: 0; width: 0; height: 0; }
+    .tech-slider { 
+      position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; 
+      background-color: #1a1a1e; border: 2px solid #3f3f46; 
+      transition: background-color 0.2s, border-color 0.2s; 
+      border-radius: 26px; 
+    }
+    .tech-slider:before { 
+      position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; 
+      background-color: #52525b; border-radius: 50%; 
+      transition: transform 0.35s cubic-bezier(0.68, -0.55, 0.265, 1.55), background-color 0.2s, box-shadow 0.2s;
+    }
+    .tech-switch input:checked + .tech-slider { border-color: #ff0033; background: rgba(255,0,51,0.12); }
+    .tech-switch input:checked + .tech-slider:before { 
+      transform: translateX(20px); 
+      background-color: #ff0033; 
+      box-shadow: 0 0 10px rgba(255,0,51,0.7); 
+    }
+    .toggle-label { font-size: 15px; font-weight: 700; color: #a1a1aa; transition: color 0.2s; }
+    .tech-switch input:checked ~ .toggle-label { color: #ffffff; }
+
+    /* Output Area */
+    .output-area {
+      background: #000000; border: 1px solid #27272a; border-radius: 12px; padding: 16px;
+      font-family: 'Fira Code', monospace; font-size: 13px; color: #d4d4d8;
+      height: 240px; overflow-y: auto; line-height: 1.65; resize: vertical;
+      white-space: pre-wrap; word-break: break-all;
+    }
+    
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #ff0033; }
+
+    /* History Item */
+    .history-item {
+      display: flex; align-items: center; justify-content: space-between;
+      background: #0f0f11; border: 1px solid #27272a; border-radius: 14px;
+      padding: 14px 16px; margin-bottom: 10px;
+      animation: slideIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+      gap: 12px;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-12px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .history-item:hover { border-color: rgba(255,0,51,0.35); background: #141417; }
+    
+    .action-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 38px; height: 38px; border-radius: 10px; border: 1px solid #27272a;
+      color: #a1a1aa; cursor: pointer; background: #1a1a1e; flex-shrink: 0;
+    }
+    .action-btn:hover { color: #fff; border-color: #ff0033; background: rgba(255,0,51,0.1); }
+    .action-btn:active { transform: scale(0.94); }
+    .action-btn.danger:hover { color: #ff0033; border-color: #ff0033; background: rgba(255,0,51,0.15); }
+
+    /* Modal */
+    #modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.88); backdrop-filter: blur(10px);
+      z-index: 100; display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+      padding: 20px;
+    }
+    #modal-overlay.active { opacity: 1; pointer-events: auto; }
+    .modal-box {
+      background: #0f0f11; border: 2px solid #ff0033; border-radius: 18px;
+      padding: 24px; width: 100%; max-width: 400px; box-shadow: 0 25px 50px rgba(0,0,0,0.7);
+      transform: scale(0.94) translateY(12px); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    #modal-overlay.active .modal-box { transform: scale(1) translateY(0); }
+
+    /* Toast */
+    #toast {
+      visibility: hidden; min-width: 240px; max-width: 90vw; background-color: #0f0f11; color: #fff;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      text-align: center; border-radius: 14px; padding: 14px 22px; position: fixed;
+      z-index: 1000; bottom: 28px; left: 50%; transform: translate(-50%, 24px);
+      font-size: 15px; font-weight: 700; border: 2px solid #ff0033; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      opacity: 0; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    #toast.show { visibility: visible; opacity: 1; transform: translate(-50%, 0); }
+
+    /* Typewriter Cursor */
+    .type-cursor {
+      display: inline-block; width: 2px; height: 1em; background-color: #ff0033;
+      animation: blink 1s step-end infinite; vertical-align: bottom; margin-left: 3px;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Mobile Sidebar */
+    .sidebar {
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .sidebar-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 30;
+      opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+    }
+    .sidebar-overlay.active { opacity: 1; pointer-events: auto; }
+    
+    @media (max-width: 768px) {
+      .sidebar {
+        position: fixed;
+        left: 0; top: 0; bottom: 0;
+        z-index: 40;
+        transform: translateX(-100%);
+      }
+      .sidebar.open { transform: translateX(0); }
+      
+      .main-content { margin-left: 0 !important; }
+    }
+
+    /* Rules content */
+    .rule-item {
+      display: flex; gap: 14px; padding: 16px; border-radius: 14px;
+      background: #0f0f11; border: 1px solid #27272a; margin-bottom: 12px;
+      transition: border-color 0.2s;
+    }
+    .rule-item:hover { border-color: rgba(255,0,51,0.3); }
+    .rule-num {
+      width: 32px; height: 32px; border-radius: 10px; background: rgba(255,0,51,0.12);
+      color: #ff0033; display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 14px; flex-shrink: 0;
+    }
+  </style>
+</head>
+<body class="h-screen flex overflow-hidden">
+  
+  <!-- Toast -->
+  <div id="toast">
+    <svg id="toast-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span id="toast-message">Message</span>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal-overlay">
+    <div class="modal-box">
+      <h3 id="modal-title" class="font-candy text-2xl text-red mb-2">Confirm</h3>
+      <p id="modal-message" class="text-fg text-[15px] font-medium mb-5 leading-relaxed">Are you sure?</p>
+      <input type="text" id="modal-input" class="w-full bg-bg border-2 border-border rounded-xl p-3.5 text-fg font-bold focus:outline-none focus:border-red mb-5 hidden transition-colors text-[15px]">
+      <div class="flex justify-end gap-3">
+        <button onclick="closeModal()" class="btn-secondary px-5 py-2.5 text-[14px] font-bold">Cancel</button>
+        <button id="modal-confirm-btn" class="btn-primary px-5 py-2.5 text-[14px] font-bold">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile Sidebar Overlay -->
+  <div id="sidebar-overlay" class="sidebar-overlay" onclick="closeSidebar()"></div>
+
+  <!-- Sidebar -->
+  <aside id="sidebar" class="sidebar w-64 bg-surface border-r border-border flex flex-col px-3 py-5 z-40 shrink-0">
+    <div class="flex items-center justify-between px-2 mb-8">
+      <div class="flex items-center gap-3 cursor-pointer" onclick="switchTab('overview'); closeSidebar()">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-red-dark to-red flex items-center justify-center text-white shadow-[0_4px_12px_rgba(255,0,51,0.35)] border border-red/40">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="rgba(255,255,255,0.1)"/>
+            <path d="M12 2v20" stroke="rgba(255,255,255,0.35)" stroke-width="1"/>
+            <circle cx="12" cy="12" r="2.5" fill="#fff"/>
+          </svg>
+        </div>
+        <span class="font-candy text-xl font-semibold tracking-wide text-fg">ClaxFuscator</span>
+      </div>
+      <button onclick="closeSidebar()" class="md:hidden p-2 rounded-lg text-muted hover:text-white hover:bg-surface-light">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+
+    <nav class="space-y-1.5 flex-1">
+      <a class="nav-item active" data-target="overview" onclick="switchTab('overview'); closeSidebar()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+        Overview
+      </a>
+      <a class="nav-item" data-target="obfuscate" onclick="switchTab('obfuscate'); closeSidebar()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19h8"/><path d="m4 17 6-6-6-6"/></svg>
+        Obfuscator
+      </a>
+      <a class="nav-item" data-target="history" onclick="switchTab('history'); closeSidebar()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+        History
+      </a>
+      <a class="nav-item" data-target="rules" onclick="switchTab('rules'); closeSidebar()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+        Rules
+      </a>
+    </nav>
+
+    <div class="px-3 pt-4 border-t border-border mt-4">
+      <p class="text-[12px] text-muted font-medium text-center">Claxfuscator V0.2</p>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content flex-1 flex flex-col h-full overflow-hidden relative min-w-0">
+    <!-- Header -->
+    <header class="h-16 md:h-18 border-b border-border flex items-center justify-between px-4 md:px-8 bg-bg/90 backdrop-blur-md shrink-0 z-10">
+      <div class="flex items-center gap-3">
+        <button onclick="openSidebar()" class="md:hidden p-2 -ml-1 rounded-lg text-muted hover:text-white hover:bg-surface-light">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></svg>
+        </button>
+        <h2 id="page-title" class="font-candy text-2xl md:text-3xl font-semibold text-fg transition-opacity duration-200">Overview</h2>
+      </div>
+    </header>
+
+    <div class="flex-1 overflow-y-auto p-4 md:p-8 relative">
+      <div class="max-w-4xl mx-auto">
+        
+        <!-- OVERVIEW TAB -->
+        <div id="tab-overview" class="tab-pane active visible">
+          <div class="card p-6 md:p-10 bg-gradient-to-br from-surface to-[#140003] overflow-hidden relative">
+            <!-- subtle glow -->
+            <div class="absolute -top-20 -right-20 w-64 h-64 bg-red/10 rounded-full blur-3xl pointer-events-none"></div>
+            
+            <div class="relative">
+              <h1 class="font-candy text-3xl md:text-5xl font-semibold text-fg leading-tight mb-1">
+                <span id="type-target-1"></span>
+              </h1>
+              <div class="flex items-center gap-2.5 mt-1 mb-5">
+                <svg class="w-6 h-6 md:w-7 md:h-7 text-red shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/>
+                  <circle cx="12" cy="10" r="3"/>
+                </svg>
+                <span class="font-candy text-3xl md:text-5xl font-semibold text-red leading-none">Clax User</span>
+              </div>
+            </div>
+
+            <p class="text-[15px] md:text-[17px] text-muted font-medium leading-relaxed mb-7 max-w-lg opacity-0 animate-[fadeIn_0.5s_ease-out_1.4s_forwards] relative">
+              Protect your Roblox Luau scripts with military-grade obfuscation. Drop a file into the Obfuscator, let the engine run, and download the protected build.
+            </p>
+            <button onclick="switchTab('obfuscate')" class="btn-primary text-[15px] md:text-[16px] font-bold px-7 py-3.5 flex items-center gap-2 relative">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19h8"/><path d="m4 17 6-6-6-6"/></svg>
+              Start Obfuscating
+            </button>
+          </div>
+
+          <!-- Feature Cards -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 mt-5 md:mt-6">
+            <div class="card p-5 hover:border-red/20 transition-all">
+              <div class="w-10 h-10 rounded-xl bg-red/10 flex items-center justify-center text-red mb-3">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              </div>
+              <h3 class="font-bold text-[15px] md:text-[16px] mb-1">Anti-Tamper</h3>
+              <p class="text-[13px] text-muted leading-relaxed">Detects and blocks unauthorized modifications to your scripts.</p>
+            </div>
+            <div class="card p-5 hover:border-red/20 transition-all">
+              <div class="w-10 h-10 rounded-xl bg-red/10 flex items-center justify-center text-red mb-3">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              </div>
+              <h3 class="font-bold text-[15px] md:text-[16px] mb-1">Intense VM</h3>
+              <p class="text-[13px] text-muted leading-relaxed">Heavy virtualization layer that makes reverse engineering hell.</p>
+            </div>
+            <div class="card p-5 hover:border-red/20 transition-all">
+              <div class="w-10 h-10 rounded-xl bg-red/10 flex items-center justify-center text-red mb-3">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              </div>
+              <h3 class="font-bold text-[15px] md:text-[16px] mb-1">Local History</h3>
+              <p class="text-[13px] text-muted leading-relaxed">All your obfuscated scripts stay safely in your browser.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- OBFUSCATE TAB -->
+        <div id="tab-obfuscate" class="tab-pane">
+          <div class="card p-5 md:p-8">
+            <div class="grid md:grid-cols-2 gap-8 md:gap-10 items-center">
+              
+              <div>
+                <h2 class="font-candy text-xl md:text-2xl font-semibold text-fg mb-2 min-h-[28px]">
+                  <span id="type-target-2"></span>
+                </h2>
+                <p class="text-[14px] md:text-[15px] text-muted font-medium mb-5">Select a <span class="font-mono text-red font-bold">.lua</span>, <span class="font-mono text-red font-bold">.luau</span> or <span class="font-mono text-red font-bold">.txt</span> file.</p>
+                
+                <input type="file" id="fileInput" accept=".lua,.luau,.txt" class="hidden">
+                
+                <div id="dropZone" class="file-zone p-6 md:p-8 flex items-center justify-center gap-4 cursor-pointer mb-6 group" onclick="document.getElementById('fileInput').click()">
+                  <svg class="text-muted group-hover:text-red transition-colors shrink-0" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  <div class="text-left min-w-0">
+                    <p class="text-[15px] md:text-[16px] font-bold text-fg group-hover:text-red transition-colors truncate" id="fileName">Click to select file</p>
+                    <p class="text-[13px] text-muted font-mono mt-0.5" id="fileSize">or drag and drop</p>
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap gap-6 mb-7">
+                  <label class="flex items-center gap-3 cursor-pointer">
+                    <div class="tech-switch">
+                      <input type="checkbox" id="toggle-tamper">
+                      <span class="tech-slider"></span>
+                    </div>
+                    <span class="toggle-label">Anti-Tamper</span>
+                  </label>
+                  
+                  <label class="flex items-center gap-3 cursor-pointer">
+                    <div class="tech-switch">
+                      <input type="checkbox" id="toggle-vm">
+                      <span class="tech-slider"></span>
+                    </div>
+                    <span class="toggle-label">Intense VM</span>
+                  </label>
+                </div>
+
+                <button id="runBtn" onclick="startObfuscation()" disabled class="btn-primary text-[15px] md:text-[16px] font-bold px-6 py-3.5 w-full flex items-center justify-center gap-2">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  Run
+                </button>
+              </div>
+
+              <div class="flex flex-col items-center justify-center border-t md:border-t-0 md:border-l border-border pt-8 md:pt-0 md:pl-8">
+                <div class="relative w-40 h-40 md:w-48 md:h-48 flex items-center justify-center">
+                  <svg class="w-full h-full absolute inset-0" viewBox="0 0 100 100">
+                    <circle class="stroke-surface-light" stroke-width="4" fill="transparent" r="44" cx="50" cy="50"/>
+                    <circle class="progress-ring__circle" stroke-width="4" fill="transparent" r="44" cx="50" cy="50" stroke-dasharray="276.46" stroke-dashoffset="276.46" id="build-ring"/>
+                  </svg>
+                  <div class="absolute flex flex-col items-center justify-center" id="pulse-container">
+                    <span class="text-3xl md:text-4xl font-mono text-fg font-bold tracking-tighter" id="build-percent">0%</span>
+                    <span class="text-[11px] text-muted tracking-widest mt-1 font-bold">STATUS</span>
+                  </div>
+                </div>
+                <p class="text-[14px] md:text-[15px] font-bold text-muted mt-4 h-5 text-center transition-all duration-300" id="build-stage">Idle</p>
+              </div>
+            </div>
+          </div>
+
+          <div id="outputSection" class="mt-5 hidden opacity-0 transition-opacity duration-300">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 px-1">
+              <h3 class="font-candy text-xl md:text-2xl font-semibold text-fg">Obfuscated Output</h3>
+              <div class="flex gap-2">
+                <button onclick="copyToClipboard('outputCode', this)" class="btn-secondary text-[14px] font-bold px-4 py-2.5 flex-1 sm:flex-none">Copy</button>
+                <button onclick="downloadCurrentOutput()" class="btn-primary text-[14px] font-bold px-4 py-2.5 flex-1 sm:flex-none">Download</button>
+              </div>
+            </div>
+            <div class="output-area" id="outputCode"></div>
+          </div>
+        </div>
+
+        <!-- HISTORY TAB -->
+        <div id="tab-history" class="tab-pane">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div>
+              <h2 class="font-candy text-2xl md:text-3xl font-semibold text-fg">History</h2>
+              <p class="text-[14px] text-muted font-medium mt-1">Stored securely in your browser.</p>
+            </div>
+            <button onclick="clearHistory()" class="btn-secondary text-[14px] font-bold text-red px-5 py-2.5 hover:bg-red hover:text-white hover:border-red self-start sm:self-auto">Clear All</button>
+          </div>
+          
+          <div id="historyList" class="space-y-0 pb-8"></div>
+        </div>
+
+        <!-- RULES TAB -->
+        <div id="tab-rules" class="tab-pane">
+          <div class="mb-6">
+            <h2 class="font-candy text-2xl md:text-3xl font-semibold text-fg">Rules & Guidelines</h2>
+            <p class="text-[14px] text-muted font-medium mt-1">Read this shit carefully before using ClaxFuscator.</p>
+          </div>
+
+          <div class="space-y-3">
+            <div class="rule-item">
+              <div class="rule-num">1</div>
+              <div>
+                <h4 class="font-bold text-[15px] mb-1.5">Legal Use Only</h4>
+                <p class="text-[13px] text-muted leading-relaxed border-b border-red/20 pb-1.5">Only obfuscate scripts you own or have full permission to modify. Don't be a fucking thief.</p>
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <div class="rule-num">2</div>
+              <div>
+                <h4 class="font-bold text-[15px] mb-1.5">No Malicious Scripts</h4>
+                <p class="text-[13px] text-muted leading-relaxed border-b border-red/20 pb-1.5">Don't use this tool for malware, exploits, phishing, or any harmful shit. We don't protect criminals.</p>
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <div class="rule-num">3</div>
+              <div>
+                <h4 class="font-bold text-[15px] mb-1.5">Roblox ToS</h4>
+                <p class="text-[13px] text-muted leading-relaxed border-b border-red/20 pb-1.5">You are solely responsible for complying with Roblox's Terms of Service. Obfuscation doesn't make illegal scripts legal.</p>
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <div class="rule-num">4</div>
+              <div>
+                <h4 class="font-bold text-[15px] mb-1.5">No Guarantees</h4>
+                <p class="text-[13px] text-muted leading-relaxed border-b border-red/20 pb-1.5">Obfuscation is not 100% unbreakable. Determined reverse engineers can still crack it. Don't cry about it later.</p>
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <div class="rule-num">5</div>
+              <div>
+                <h4 class="font-bold text-[15px] mb-1.5">Local Processing</h4>
+                <p class="text-[13px] text-muted leading-relaxed border-b border-red/20 pb-1.5">Everything runs in your browser. Your scripts never leave your device. History is stored only in localStorage.</p>
+              </div>
+            </div>
+
+            <div class="rule-item">
+              <div class="rule-num">6</div>
+              <div>
+                <h4 class="font-bold text-[15px] mb-1.5">Abuse = Ban</h4>
+                <p class="text-[13px] text-muted leading-relaxed border-b border-red/20 pb-1.5">If we detect abuse of this tool for harmful purposes, access will be revoked without warning. Don't test us.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card p-5 mt-6 border-red/30">
+            <p class="text-[13px] text-muted leading-relaxed">
+              <span class="text-red font-bold">Disclaimer:</span> ClaxFuscator is provided as-is. The developers are not responsible for any misuse, account bans, or damage caused by obfuscated scripts. Use at your own fucking risk.
+            </p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <script type="text/plain" id="engineSrc">/*__ENGINE__*/</script>
+  <script>
+    // --- ENGINE CORE (v2 layer-12 pipeline, runs in a worker) ---
+    'use strict';
+
+    var MODULE_B64 = /*__MODULES__*/;
+    var DRIVER_B64 = /*__DRIVER__*/;
+    var WORKER_B64 = /*__WORKER__*/;
+    var WASM_B64 = /*__WASM__*/;
+
+    var encoder = new TextEncoder();
+
+    function decodeB64(b64) {
+      var bin = atob(b64);
+      var bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new TextDecoder('utf-8').decode(bytes);
+    }
+
+    function frameDecode(value) {
+      if (typeof value !== 'string') return value;
+      try { return decodeURIComponent(value); } catch (err) { return value; }
+    }
+
+    function decodeDeep(value) {
+      if (typeof value === 'string') return frameDecode(value);
+      if (Array.isArray(value)) return value.map(decodeDeep);
+      if (value && typeof value === 'object') {
+        var out = {};
+        Object.keys(value).forEach(function (key) { out[key] = decodeDeep(value[key]); });
+        return out;
+      }
+      return value;
+    }
+
+    // status \1 jsonLength \1 json \1 code
+    function parseFrame(raw) {
+      if (typeof raw !== 'string' || raw.length < 5) throw new Error('empty response');
+      var first = raw.indexOf('');
+      if (first < 0) throw new Error('frame header missing');
+      var status = raw.slice(0, first);
+      var rest = raw.slice(first + 1);
+      var second = rest.indexOf('');
+      if (second < 0) throw new Error('frame length missing');
+      var length = Number(rest.slice(0, second));
+      var start = second + 1;
+      var payload = rest.slice(start, start + length);
+      var code = rest.slice(start + length + 1);
+      var data = null;
+      if (payload) {
+        try { data = decodeDeep(JSON.parse(payload)); }
+        catch (err) { data = null; }
+      }
+      return { status: status, data: data, code: code };
+    }
+
+    function engineSource() {
+      var host = document.getElementById('engineSrc');
+      return host ? host.textContent : '';
+    }
+
+    var engine = {
+      worker: null, dead: false, fatal: null, seq: 1, pending: {},
+      ready: false, readyWaiters: []
+    };
+
+    function failPending(message) {
+      var pending = engine.pending;
+      engine.pending = {};
+      Object.keys(pending).forEach(function (id) {
+        pending[id].reject(new Error(message));
+      });
+      var waiters = engine.readyWaiters;
+      engine.readyWaiters = [];
+      waiters.forEach(function (fn) { fn(message); });
+    }
+
+    function whenReady(fn) {
+      if (engine.ready) fn(null);
+      else if (engine.dead) fn(engine.fatal || 'engine unavailable');
+      else engine.readyWaiters.push(fn);
+    }
+
+    // Split builds report real piece boundaries; they drive the ring directly.
+    var livePieces = 0, livePieceTotal = 0, liveBytes = 0;
+
+    function onWorkerMessage(msg) {
+      if (msg.type === 'fatal') {
+        engine.dead = true;
+        engine.fatal = msg.error || 'engine boot failed';
+        engine.worker = null;
+        failPending(engine.fatal);
+        return;
+      }
+      if (msg.type === 'ready') {
+        engine.ready = true;
+        var waiters = engine.readyWaiters;
+        engine.readyWaiters = [];
+        waiters.forEach(function (fn) { fn(null); });
+        return;
+      }
+      if (msg.type === 'part') {
+        if (typeof msg.data === 'string') {
+          buildParts.push(encoder.encode(msg.data));
+          liveBytes += encoder.encode(msg.data).length;
+          ringProgress(Math.max(ringPct, 6 + 88 * (livePieces / Math.max(1, livePieceTotal))), true);
+        }
+        return;
+      }
+      if (msg.type === 'step') {
+        livePieces = Number(msg.index) || 0;
+        livePieceTotal = Number(msg.total) || 0;
+        if (livePieceTotal) {
+          buildStage.innerText = 'Piece ' + livePieces + '/' + livePieceTotal;
+          ringProgress(Math.max(ringPct, 6 + 88 * (livePieces / livePieceTotal)), true);
+        }
+        return;
+      }
+      var slot = engine.pending[msg.id];
+      if (!slot) return;
+      delete engine.pending[msg.id];
+      if (msg.ok) slot.resolve(parseFrame(String(msg.raw)));
+      else slot.reject(new Error(msg.error || 'engine error'));
+    }
+
+    function startEngine() {
+      if (engine.worker || engine.dead) return;
+      try {
+        var source = 'var window = self;\n' + engineSource() +
+          '\nvar ENGINE_WASM_B64 = ' + JSON.stringify(WASM_B64) + ';\n' +
+          decodeB64(WORKER_B64);
+        var url = URL.createObjectURL(
+          new Blob([source], { type: 'application/javascript' }));
+        var worker = new Worker(url);
+        worker.onmessage = function (event) { onWorkerMessage(event.data || {}); };
+        worker.onerror = function (event) {
+          if (event && event.preventDefault) event.preventDefault();
+          engine.dead = true;
+          engine.fatal = 'engine crashed: ' +
+            ((event && event.message) || 'unknown error');
+          engine.worker = null;
+          failPending(engine.fatal);
+        };
+        engine.worker = worker;
+        worker.postMessage({ type: 'init', modules: MODULE_B64, driver: DRIVER_B64 });
+      } catch (err) {
+        engine.dead = true;
+        engine.fatal = 'engine could not start: ' +
+          String((err && err.message) || err);
+        engine.worker = null;
+        failPending(engine.fatal);
+      }
+    }
+
+    function engineCall(action, opts) {
+      if (!engine.dead) startEngine();
+      return new Promise(function (resolve, reject) {
+        whenReady(function (failure) {
+          if (failure || engine.dead || !engine.worker) {
+            reject(new Error(failure || 'engine unavailable'));
+            return;
+          }
+          var id = engine.seq++;
+          engine.pending[id] = { resolve: resolve, reject: reject };
+          engine.worker.postMessage({ id: id, type: 'call', action: action, opts: opts });
+        });
+      });
+    }
+
+    // ------------------------------------------------------------------ build
+    var VERIFY_MAX = 1073741824;
+    var REPAIR_ROUNDS = 3;
+    var PREVIEW_BYTES = 262144;
+    var buildParts = [];
+    var builtSource = null;
+    var buildSeq = 0;
+    var repairSeedSeq = 0;
+    var ringPct = 0, ringTimer = null, ringStart = 0, ringEst = 4000;
+    var lastBuildMs = 0, lastBuildLen = 0;
+
+    function note(text, kind) {
+      buildStage.innerText = text || 'Idle';
+      buildStage.classList.remove('text-green-500', 'text-red-500', 'text-muted', 'text-fg');
+      if (kind === 'ok') buildStage.classList.add('text-green-500');
+      else if (kind === 'err') buildStage.classList.add('text-red-500');
+      else if (kind === 'warn') buildStage.classList.add('text-fg');
+      else buildStage.classList.add('text-muted');
+    }
+
+    function ringProgress(pct, fromEngine) {
+      if (fromEngine) pct = Math.max(pct, ringPct);
+      ringPct = Math.min(99, Math.round(pct));
+      buildRing.style.strokeDashoffset = CIRCUMFERENCE - (ringPct / 100) * CIRCUMFERENCE;
+      buildPercent.innerText = ringPct + '%';
+    }
+
+    function ringStartRun(len) {
+      ringPct = 0;
+      livePieces = 0; livePieceTotal = 0; liveBytes = 0;
+      buildParts = [];
+      ringStart = Date.now();
+      ringEst = lastBuildMs > 0
+        ? Math.max(2200, Math.min(240000, lastBuildMs * (0.8 + 0.2 * (len / Math.max(1, lastBuildLen))) + 250))
+        : Math.max(2500, Math.min(240000, 4500 + len * 1.2));
+      if (ringTimer) cancelAnimationFrame(ringTimer);
+      var tick = function (ts) {
+        if (!ringStart) return;
+        var el = Date.now() - ringStart;
+        var frac = Math.min(1, el / (ringEst * 0.85));
+        ringProgress(Math.max(ringPct, 4 + frac * 86), false);
+        var pulse = 1 + Math.sin(ts / 55) * 0.04;
+        pulseContainer.style.transform = 'scale(' + pulse + ')';
+        ringTimer = requestAnimationFrame(tick);
+      };
+      ringTimer = requestAnimationFrame(tick);
+    }
+
+    function ringFinish() {
+      var began = ringStart;
+      ringStart = 0;
+      if (ringTimer) { cancelAnimationFrame(ringTimer); ringTimer = null; }
+      pulseContainer.style.transform = 'scale(1)';
+      if (began) lastBuildMs = Math.max(500, Date.now() - began);
+    }
+
+    function assembledCode() {
+      var total = 0, i;
+      for (i = 0; i < buildParts.length; i++) total += buildParts[i].length;
+      if (!total || total > VERIFY_MAX) return '';
+      try {
+        var merged = new Uint8Array(total);
+        var at = 0;
+        for (i = 0; i < buildParts.length; i++) {
+          merged.set(buildParts[i], at);
+          at += buildParts[i].length;
+        }
+        return new TextDecoder('utf-8').decode(merged);
+      } catch (err) {
+        return '';
+      }
+    }
+
+    function setArtifact(code) {
+      currentGeneratedCode = code;
+      outputCode.textContent = code.length > PREVIEW_BYTES
+        ? code.slice(0, PREVIEW_BYTES) + '\n... [' + fmtBytes(code.length - PREVIEW_BYTES) + ' preview cut — Copy/Download carry the full file]'
+        : code;
+      outputSection.classList.remove('hidden');
+      setTimeout(function () { outputSection.style.opacity = '1'; }, 40);
+    }
+
+    function runBudget() {
+      var bytes = currentGeneratedCode ? currentGeneratedCode.length : 0;
+      return {
+        maxSteps: Math.max(400000000, Math.ceil(bytes * 1600)),
+        seconds: Math.min(1800, 30 + Math.ceil(bytes / 20000) * 4),
+        stepChunk: bytes > 8388608 ? 500000 : 250000
+      };
+    }
+
+    function verifyBudget(scale) {
+      var b = runBudget();
+      var k = scale || 1;
+      return {
+        maxSteps: Math.min(b.maxSteps, 4398046511104),
+        seconds: Math.min(1800, b.seconds * k),
+        stepChunk: b.stepChunk
+      };
+    }
+
+    function verifyBuild(seq, code, round, scale) {
+      if (seq !== buildSeq) return;
+      if (round === 0 && !scale) note('Verifying output...', '');
+      var b = verifyBudget(scale);
+      engineCall('run', {
+        source: builtSource, code: code, preset: 'strong',
+        maxSteps: b.maxSteps, seconds: b.seconds, stepChunk: b.stepChunk
+      }).then(function (frame) {
+        if (seq !== buildSeq) return;
+        var d = (frame && frame.status === 'OK') ? frame.data : null;
+        if (d && d.ok) {
+          if (d.source && d.source.ok && d.obfuscated && d.obfuscated.ok) {
+            note('Completed — verified, output matches', 'ok');
+            showToast('Build complete & verified!');
+          } else {
+            note('Completed — build runs (runtime warning)', 'warn');
+            showToast('Build complete (with warnings)', true);
+          }
+          return;
+        }
+        if (d && d.reason === 'sandbox limit') {
+          if (!scale) { verifyBuild(seq, code, round, 3); return; }
+          note('Completed — verification skipped (time limit)', '');
+          return;
+        }
+        repairBuild(seq, code, round, (d && d.reason) || 'output mismatch');
+      }, function () {
+        if (seq !== buildSeq) return;
+        note('Completed — verification unavailable', 'warn');
+      });
+    }
+
+    function repairBuild(seq, code, round, reason) {
+      if (seq !== buildSeq) return;
+      if (round >= REPAIR_ROUNDS) {
+        note('Repair failed: ' + reason, 'err');
+        showToast('Repair failed: ' + reason, false);
+        return;
+      }
+      note('Repairing build ' + (round + 1) + '/' + REPAIR_ROUNDS + '...', 'warn');
+      var b = runBudget();
+      var seed = (Date.now() + (++repairSeedSeq) * 2654435761) % 4294967295;
+      engineCall('fix', {
+        source: builtSource, preset: 'strong', seed: seed,
+        rules: currentRules(), maxSteps: b.maxSteps, seconds: b.seconds,
+        stepChunk: b.stepChunk
+      }).then(function (frame) {
+        if (seq !== buildSeq) return;
+        if (frame.status !== 'OK' || !frame.data) {
+          repairBuild(seq, code, round + 1, 'engine error');
+          return;
+        }
+        var d = frame.data;
+        if (!d.ok || !frame.code) {
+          repairBuild(seq, code, round + 1, d.stage || d.note || reason);
+          return;
+        }
+        setArtifact(frame.code);
+        saveToHistory(currentFile ? currentFile.name : 'script.lua', frame.code);
+        verifyBuild(seq, frame.code, round + 1);
+      }, function () {
+        repairBuild(seq, code, round + 1, 'engine error');
+      });
+    }
+
+    // Every layer is always on; the dashboard toggles map onto real options.
+    function currentRules() {
+      return {
+        flatten: true, opaque: true,
+        selfmod: document.getElementById('toggle-vm').checked,
+        antidebug: document.getElementById('toggle-tamper').checked,
+        integrity: document.getElementById('toggle-tamper').checked
+      };
+    }
+
+    function failBuild(data) {
+      var msg = data.stage || 'build failed';
+      if (data.errors && data.errors.length) {
+        msg += ': ' + data.errors.slice(0, 3).map(function (e) {
+          return (e.line ? 'line ' + e.line + ': ' : '') + (e.msg || 'error');
+        }).join(' | ');
+      }
+      note(msg, 'err');
+      showToast('Build failed — ' + (data.stage || 'unknown'), false);
+    }
+
+    function startObfuscation() {
+      if (!currentFile || !currentFileText || running) return;
+      running = true;
+      runBtn.disabled = true;
+      outputSection.classList.add('hidden');
+      outputSection.style.opacity = '0';
+      note('Preparing engine...', '');
+      ringStartRun(currentFileText.length);
+      var seq = ++buildSeq;
+      engineCall('build', {
+        source: currentFileText, preset: 'strong', seed: null,
+        rules: currentRules(), maxSteps: 400000000, seconds: 12
+      }).then(function (frame) {
+        if (seq !== buildSeq) return;
+        ringFinish();
+        if (frame.status === 'CRASH' || !frame.data) {
+          running = false;
+          runBtn.disabled = false;
+          note((frame.data && frame.data.msg) || 'engine crashed', 'err');
+          showToast('Engine crashed', false);
+          return;
+        }
+        var data = frame.data;
+        if (!data.ok) {
+          running = false;
+          runBtn.disabled = false;
+          failBuild(data);
+          return;
+        }
+        builtSource = currentFileText;
+        var code = data.streamed ? assembledCode() : (frame.code || '');
+        if (!code) {
+          running = false;
+          runBtn.disabled = false;
+          note('Build produced no output', 'err');
+          showToast('Empty artifact', false);
+          return;
+        }
+        setArtifact(code);
+        saveToHistory(currentFile.name, code);
+        ringProgress(100, false);
+        ringPct = 100;
+        buildRing.style.strokeDashoffset = 0;
+        buildPercent.innerText = '100%';
+        running = false;
+        runBtn.disabled = false;
+        verifyBuild(seq, code, 0);
+      }, function (err) {
+        if (seq !== buildSeq) return;
+        ringFinish();
+        running = false;
+        runBtn.disabled = false;
+        note(String(err && err.message || err), 'err');
+        showToast('Build failed', false);
+      });
+    }
+
+    // --- TYPEWRITER ---
+    let typeTimeout;
+    
+    function typeWriter(text, elementId, speed = 15) {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      el.innerHTML = '';
+      let i = 0;
+      
+      const cursor = document.createElement('span');
+      cursor.className = 'type-cursor';
+      el.appendChild(cursor);
+
+      function type() {
+        if (i < text.length) {
+          let char = text.charAt(i);
+          if (char === '<') {
+            const endTag = text.indexOf('>', i);
+            if (endTag !== -1) {
+              cursor.insertAdjacentHTML('beforebegin', text.substring(i, endTag + 1));
+              i = endTag + 1;
+            } else {
+              cursor.insertAdjacentText('beforebegin', char);
+              i++;
+            }
+          } else {
+            cursor.insertAdjacentText('beforebegin', char);
+            i++;
+          }
+          typeTimeout = setTimeout(type, speed);
+        } else {
+          setTimeout(() => cursor.remove(), 900);
+        }
+      }
+      type();
+    }
+
+    // --- SIDEBAR (Mobile) ---
+    function openSidebar() {
+      document.getElementById('sidebar').classList.add('open');
+      document.getElementById('sidebar-overlay').classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeSidebar() {
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('sidebar-overlay').classList.remove('active');
+      document.body.style.overflow = '';
+    }
+
+    // --- MODAL ---
+    let modalCallback = null;
+    const overlay = document.getElementById('modal-overlay');
+    const modalTitle = document.getElementById('modal-title');
+    const modalMessage = document.getElementById('modal-message');
+    const modalInput = document.getElementById('modal-input');
+    const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+
+    function showModal(title, message, isPrompt, defaultValue, callback) {
+      modalTitle.innerText = title;
+      modalMessage.innerText = message;
+      modalCallback = callback;
+      
+      if (isPrompt) {
+        modalInput.classList.remove('hidden');
+        modalInput.value = defaultValue || "";
+        setTimeout(() => modalInput.focus(), 80);
+      } else {
+        modalInput.classList.add('hidden');
+      }
+      
+      overlay.classList.add('active');
+    }
+
+    function closeModal() {
+      overlay.classList.remove('active');
+      setTimeout(() => modalCallback = null, 250);
+    }
+
+    modalConfirmBtn.onclick = () => {
+      if (modalCallback) {
+        if (!modalInput.classList.contains('hidden')) {
+          modalCallback(modalInput.value);
+        } else {
+          modalCallback();
+        }
+      }
+      closeModal();
+    };
+
+    // --- TOAST ---
+    function showToast(message, isSuccess = true) {
+      const toast = document.getElementById("toast");
+      const icon = document.getElementById("toast-icon");
+      document.getElementById("toast-message").innerText = message;
+      
+      if (isSuccess) {
+        icon.innerHTML = '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>';
+        toast.style.borderColor = '#22c55e';
+      } else {
+        icon.innerHTML = '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>';
+        toast.style.borderColor = '#ff0033';
+      }
+      
+      toast.classList.add("show");
+      setTimeout(() => toast.classList.remove("show"), 2800);
+    }
+
+    // --- TAB SWITCHING ---
+    function switchTab(tabId) {
+      const currentActive = document.querySelector('.tab-pane.active');
+      const newTarget = document.getElementById('tab-' + tabId);
+      const titleEl = document.getElementById('page-title');
+      
+      if (currentActive === newTarget) return;
+
+      clearTimeout(typeTimeout);
+
+      if (currentActive) {
+        currentActive.classList.remove('visible');
+        setTimeout(() => {
+          currentActive.classList.remove('active');
+          
+          newTarget.classList.add('active');
+          void newTarget.offsetWidth; 
+          newTarget.classList.add('visible');
+
+          document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+          document.querySelector(`.nav-item[data-target="${tabId}"]`).classList.add('active');
+          
+          titleEl.style.opacity = '0';
+          setTimeout(() => {
+            const titles = { overview: 'Overview', obfuscate: 'Obfuscator', history: 'History', rules: 'Rules' };
+            titleEl.innerText = titles[tabId];
+            titleEl.style.opacity = '1';
+          }, 140);
+
+          if (tabId === 'overview') {
+            typeWriter("Welcome back,", "type-target-1", 22);
+          } else if (tabId === 'obfuscate') {
+            typeWriter("Claxfuscator V0.2", "type-target-2", 14);
+          } else if (tabId === 'history') {
+            renderHistory();
+          }
+          
+        }, 280); 
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      typeWriter("Welcome back,", "type-target-1", 22);
+    });
+
+    // --- FILE HANDLING ---
+    const fileInput = document.getElementById('fileInput');
+    const dropZone = document.getElementById('dropZone');
+    const fileNameEl = document.getElementById('fileName');
+    const fileSizeEl = document.getElementById('fileSize');
+    const runBtn = document.getElementById('runBtn');
+    const buildRing = document.getElementById('build-ring');
+    const buildPercent = document.getElementById('build-percent');
+    const buildStage = document.getElementById('build-stage');
+    const outputSection = document.getElementById('outputSection');
+    const outputCode = document.getElementById('outputCode');
+    const pulseContainer = document.getElementById('pulse-container');
+    const CIRCUMFERENCE = 276.46;
+    let currentFile = null;
+    let currentFileText = null;
+    let currentGeneratedCode = "";
+    let running = false;
+
+    function fmtBytes(n) {
+      if (!n) return '0 B';
+      if (n < 1024) return n + ' B';
+      if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+      return (n / 1048576).toFixed(2) + ' MB';
+    }
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
+
+    dropZone.addEventListener('dragover', () => dropZone.classList.add('dragover'));
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+      dropZone.classList.remove('dragover');
+      handleFile(e.dataTransfer.files[0]);
+    });
+
+    fileInput.addEventListener('change', function() { handleFile(this.files[0]); });
+
+    function handleFile(file) {
+      if (!file) return;
+      currentFile = file;
+      currentFileText = null;
+      runBtn.disabled = true;
+
+      let size = file.size;
+      let sizeStr = size < 1024 ? size + ' B' : (size < 1048576 ? (size/1024).toFixed(1) + ' KB' : (size/1048576).toFixed(2) + ' MB');
+
+      fileNameEl.innerText = file.name;
+      fileSizeEl.innerText = sizeStr + ' · reading...';
+
+      const reader = new FileReader();
+      reader.onload = function () {
+        currentFileText = String(reader.result || '');
+        fileSizeEl.innerText = sizeStr + ' · ' + currentFileText.length.toLocaleString() + ' chars';
+        fileNameEl.classList.add('text-red');
+        dropZone.style.borderStyle = 'solid';
+        dropZone.style.borderColor = 'rgba(255,0,51,0.35)';
+        runBtn.disabled = false;
+      };
+      reader.onerror = function () {
+        fileSizeEl.innerText = sizeStr + ' · read failed';
+        showToast('Could not read the file', false);
+      };
+      reader.readAsText(file);
+    }
+
+    // --- COPY & DOWNLOAD ---
+    function copyToClipboard(elementId, btnElement) {
+      // The pane is a truncated preview; the clipboard gets the full artifact.
+      const text = currentGeneratedCode ||
+        document.getElementById(elementId).textContent;
+      const finishCopy = () => {
+        showToast("Copied to clipboard!");
+        if(btnElement) {
+           const orig = btnElement.innerText;
+           btnElement.innerText = "Copied!";
+           btnElement.classList.add('text-green-500', 'border-green-500');
+           setTimeout(() => {
+             btnElement.innerText = orig;
+             btnElement.classList.remove('text-green-500', 'border-green-500');
+           }, 1800);
+        }
+      };
+
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(finishCopy).catch(() => fallbackCopy(text, finishCopy));
+      } else {
+        fallbackCopy(text, finishCopy);
+      }
+    }
+
+    function fallbackCopy(text, callback) {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed"; textArea.style.top = "-9999px";
+      document.body.appendChild(textArea);
+      textArea.focus(); textArea.select();
+      try { document.execCommand('copy'); callback(); } 
+      catch (err) { showToast("Failed to copy.", false); }
+      document.body.removeChild(textArea);
+    }
+
+    function downloadFile(content, filename) {
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      
+      setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }, 800);
+      
+      showToast("Download started!");
+    }
+
+    function downloadCurrentOutput() {
+      if (!currentGeneratedCode) return;
+      const randomNum = Math.floor(10000000 + Math.random() * 90000000);
+      downloadFile(currentGeneratedCode, `claxobfuscated_${randomNum}.lua`);
+    }
+
+    // --- HISTORY ---
+    function getHistory() {
+      try {
+        const h = localStorage.getItem('clax_history_v7');
+        return h ? JSON.parse(h) : [];
+      } catch(e) {
+        if(!window.memHistory) window.memHistory = [];
+        return window.memHistory;
+      }
+    }
+
+    function setHistory(history) {
+      try { localStorage.setItem('clax_history_v7', JSON.stringify(history)); } 
+      catch(e) { window.memHistory = history; }
+    }
+
+    function saveToHistory(originalName, code) {
+      const history = getHistory();
+      history.unshift({
+        id: Date.now().toString(),
+        customName: originalName.replace(/\.[^/.]+$/, ""),
+        date: new Date().toLocaleString(),
+        code: code
+      });
+      setHistory(history);
+    }
+
+    function renderHistory() {
+      const history = getHistory();
+      const list = document.getElementById('historyList');
+      
+      if (history.length === 0) {
+        list.innerHTML = `<div class="text-center py-14 text-muted text-[15px] font-bold border-2 border-dashed border-border rounded-2xl">No history found. Obfuscate a script first!</div>`;
+        return;
+      }
+
+      list.innerHTML = history.map(item => `
+        <div class="history-item">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-11 h-11 rounded-xl bg-surface-light border border-border flex items-center justify-center text-red shrink-0">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            </div>
+            <div class="min-w-0">
+              <p class="text-[15px] font-bold text-fg truncate">${item.customName}.lua</p>
+              <p class="text-[12px] text-muted font-medium mt-0.5">${item.date}</p>
+            </div>
+          </div>
+          <div class="flex gap-1.5 shrink-0">
+            <button onclick="renameHistory('${item.id}')" class="action-btn" title="Rename">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            <button onclick="downloadHistory('${item.id}')" class="action-btn" title="Download">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </button>
+            <button onclick="deleteHistory('${item.id}')" class="action-btn danger" title="Delete">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renameHistory(id) {
+      const history = getHistory();
+      const item = history.find(h => h.id === id);
+      if (!item) return;
+
+      showModal("Rename Script", "Enter a new name:", true, item.customName, (newName) => {
+        if (newName && newName.trim() !== "") {
+          item.customName = newName.trim();
+          setHistory(history);
+          renderHistory();
+          showToast("Renamed!");
+        }
+      });
+    }
+
+    function deleteHistory(id) {
+      showModal("Delete Script", "Are you sure you want to delete this script?", false, null, () => {
+        let history = getHistory();
+        history = history.filter(h => h.id !== id);
+        setHistory(history);
+        renderHistory();
+        showToast("Deleted.");
+      });
+    }
+
+    function clearHistory() {
+      const history = getHistory();
+      if (history.length === 0) {
+        showToast("History is already empty!", false);
+        return;
+      }
+
+      showModal("Clear History", "Clear all history? This cannot be undone.", false, null, () => {
+        setHistory([]);
+        renderHistory();
+        showToast("Cleared all history.");
+      });
+    }
+
+    function downloadHistory(id) {
+      const history = getHistory();
+      const item = history.find(h => h.id === id);
+      if (!item) return;
+
+      const randomNum = Math.floor(10000000 + Math.random() * 90000000);
+      downloadFile(item.code, `claxobfuscated_${randomNum}.lua`);
+    }
+  </script>
+</body>
+</html>
